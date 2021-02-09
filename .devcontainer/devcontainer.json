@@ -1,0 +1,22 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+{
+    "name": "Jupyter",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": { "TAG": "016833b15ceb" }
+    },
+    //"runArgs": [ "-e JUPYTER_ENABLE_LAB=yes"],
+
+    // Set *default* container specific settings.json values on container create.
+    "settings": { 
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+
+    // Add the IDs of extensions you want installed when the container is created.
+    "extensions": ["ms-python.python", "ms-toolsai.jupyter", "bierner.github-markdown-preview"],
+
+    // Use 'forwardPorts' to make a list of ports inside the container available locally.
+    "forwardPorts": [8000],
+
+    "remoteUser": "jovyan"
+}
