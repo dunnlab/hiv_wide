@@ -4,9 +4,12 @@
 ARG VARIANT="latest"
 FROM  jupyter/scipy-notebook:${VARIANT}
 
-# [Optional] Uncomment this section to install additional OS packages.
-# RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends <your-package-list-here>
+USER root
+
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends \
+        muscle \
+        wget
 
 USER $NB_UID
 
