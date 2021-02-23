@@ -4,13 +4,6 @@
 ARG VARIANT="latest"
 FROM  jupyter/scipy-notebook:${VARIANT}
 
-USER root
-
-RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends \
-        muscle \
-        wget
-
 USER $NB_UID
 
 # Install Python 3 packages
