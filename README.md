@@ -3,7 +3,7 @@ pol vs whole analyses
 
 ## Goals
 
-- [ ] Make a single alignment of all full genomes to be considered. Obtain the start and stop positions of pol. (`public-hiv-data-20201202/clean/hiv.fa`)
+- [x] Make a single alignment of all full genomes to be considered. Obtain the start and stop positions of pol. ([#3](/../../issues/3), `LANL_alignment.tar.xz`)
 - [ ] Randomize the order of the rows.
 - [ ] Apply masks to all but pol for 0%, 10%, 20%, ... 100% of the rows, starting with the bottom row. This means that for example, the sequences masked in the 10% sample are a perfect subsample of those masked in the 20% sample. The resulting matrices would have a T shape, where the bar across the top is the sequences that are fully sampled and the vertical stem is the pol samples, with all other sites before and after masked (replaced with gaps).
 - [ ] Do ML search and bootstraps for each of the 11 subsamples (including 0% masking)
