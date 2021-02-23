@@ -132,3 +132,5 @@ dmypy.json
 public-hiv-data-20201202/clean
 public-hiv-data-20201202/raw
 LANL_alignment
+HIV1_FLT_2018_genome_DNA.fasta
+
