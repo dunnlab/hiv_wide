@@ -131,3 +131,4 @@ dmypy.json
 # ignore data dirs for now
 public-hiv-data-20201202/clean
 public-hiv-data-20201202/raw
+LANL_alignment
