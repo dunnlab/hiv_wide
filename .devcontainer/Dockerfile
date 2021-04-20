@@ -9,6 +9,7 @@ USER $NB_UID
 # Install Python 3 packages
 RUN conda install --quiet --yes \
         "biopython" \
+        "ete3" \
         "flake8" \
         "black" \
     && conda clean --all -f -y \

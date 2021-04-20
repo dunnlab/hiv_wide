@@ -4,10 +4,10 @@ pol vs whole analyses
 ## Goals
 
 - [x] Make a single alignment of all full genomes to be considered. Obtain the start and stop positions of pol. ([#3](/../../issues/3), `LANL_alignment.tar.xz`)
-- [ ] Randomize the order of the rows.
-- [ ] Apply masks to all but pol for 0%, 10%, 20%, ... 100% of the rows, starting with the bottom row. This means that for example, the sequences masked in the 10% sample are a perfect subsample of those masked in the 20% sample. The resulting matrices would have a T shape, where the bar across the top is the sequences that are fully sampled and the vertical stem is the pol samples, with all other sites before and after masked (replaced with gaps).
-- [ ] Do ML search and bootstraps for each of the 11 subsamples (including 0% masking)
-- [ ] For each bipartition in the 0% masking tree, identify bootstrap support in each of the samples. Look for decay in support as progressively more sequences are masked. This gives a sense of false negatives, ie loss of signal, as we go from full genome to just pol.
+- [x] Randomize the order of the rows.
+- [x] Apply masks to all but pol for 0%, 10%, 20%, ... 100% of the rows, starting with the bottom row. This means that for example, the sequences masked in the 10% sample are a perfect subsample of those masked in the 20% sample. The resulting matrices would have a T shape, where the bar across the top is the sequences that are fully sampled and the vertical stem is the pol samples, with all other sites before and after masked (replaced with gaps).
+- [x] Do ML search and bootstraps for each of the 11 subsamples (including 0% masking)
+- [x] For each bipartition in the 0% masking tree, identify bootstrap support in each of the samples. Look for decay in support as progressively more sequences are masked. This gives a sense of false negatives, ie loss of signal, as we go from full genome to just pol.
 - [ ] Identify any strongly supported ML bipartitions in highly masked analyses that have low support in the unmasked matrix. This gives an example of false positives, ie relationships that have increased support as data are removed. These are cases where pol is potentially misleading.
 - [ ] Possibly randomize and repeat again, to assess sensitivity to order.
 
