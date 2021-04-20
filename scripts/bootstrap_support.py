@@ -1,10 +1,16 @@
 #!/usr/bin/env python
+import os
 import re
-from glob import glob
 from collections import defaultdict
+from glob import glob
 
+import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 from ete3 import BarChartFace, TextFace, Tree, TreeStyle
 from ete3.treeview.faces import add_face_to_node
+
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 
 def add_support_values(tree):
@@ -28,7 +34,7 @@ add_support_values(whole_aln_tree)
 
 mask_regex = r"mask(\d+)"
 pct_masks = [0]
-# common_bootstraped_nodes = set()
+node_support_values = []
 tree_file_list = [t for t in glob("trees/HIV1_FLT_2018_genome_DNA_mask*.fa.treefile")]
 for tree_file in tree_file_list:
     pct_mask_match = re.search(r"mask(\d+)", tree_file)
@@ -47,9 +53,18 @@ for tree_file in tree_file_list:
                 whole_aln_tree_node.barchart_values[
                     pct_mask
                 ] = masked_tree_node.bootstrap
-                whole_aln_tree_node.barchart_values[0] = masked_tree_node.bootstrap
-                # common_bootstraped_nodes.add(whole_aln_tree_node)
+                whole_aln_tree_node.barchart_values[0] = whole_aln_tree_node.bootstrap
+                node_support_values.append(
+                    {
+                        "Whole Alignment Bootstrap": whole_aln_tree_node.bootstrap,
+                        "Masked Bootstrap": masked_tree_node.bootstrap,
+                        "Percent Mask": pct_mask,
+                    }
+                )
         print("Done.")
+
+
+# plot trees
 
 
 def botstrap_stars(node):
@@ -62,6 +77,7 @@ def botstrap_stars(node):
                 node=node,
                 column=0,
             )
+
 
 def botstrap_bars(node):
     botstrap_stars(node)
@@ -82,7 +98,6 @@ def botstrap_bars(node):
                     "#DC6959",
                     "#EF745C",
                 ],
-                #min_value=80,
                 max_value=100,
             ),
             node=node,
@@ -90,10 +105,52 @@ def botstrap_bars(node):
         )
 
 
-
 stars_style = TreeStyle()
 stars_style.layout_fn = botstrap_stars
-whole_aln_tree.render(file_name="trees/botstrap_stars.pdf", tree_style=stars_style)
+whole_aln_tree.render(file_name="plots/tree_botstrap_stars.pdf", tree_style=stars_style)
 bars_style = TreeStyle()
 bars_style.layout_fn = botstrap_bars
-whole_aln_tree.render(file_name="trees/botstrap_bars.pdf", tree_style=bars_style)
+whole_aln_tree.render(file_name="plots/tree_botstrap_bars.pdf", tree_style=bars_style)
+
+
+node_support_df = pd.DataFrame(node_support_values)
+# "top-right" of scatter plot
+high_support_df = node_support_df[(node_support_df["Whole Alignment Bootstrap"] >=bootstrap_cutoff) & (node_support_df["Masked Bootstrap"]>=bootstrap_cutoff)]
+whole_aln_support_df = node_support_df[(node_support_df["Whole Alignment Bootstrap"] >=bootstrap_cutoff) & (node_support_df["Masked Bootstrap"]<bootstrap_cutoff)]
+masked_aln_support_df = node_support_df[(node_support_df["Whole Alignment Bootstrap"] <bootstrap_cutoff) & (node_support_df["Masked Bootstrap"]>=bootstrap_cutoff)]
+low_support_df = node_support_df[(node_support_df["Whole Alignment Bootstrap"] <bootstrap_cutoff) & (node_support_df["Masked Bootstrap"]<bootstrap_cutoff)]
+
+# scatter plot
+color_map = mpl.cm.get_cmap('cividis')
+#.colors.to_hex(
+#color_map = mpl.cm.get_cmap('cubehelix')
+scatter_pcts = node_support_df["Percent Mask"].unique()
+scatter_pcts.sort()
+scatter_colors = color_map((scatter_pcts)/100)
+fig, ax = plt.subplots(dpi=300)
+ax.set_facecolor("gainsboro")
+xlabel = "Whole Alignment Bootstrap"
+ylabel = "Masked Bootstrap"
+for pct, color in zip(scatter_pcts[::-1], scatter_colors[::-1]):
+    pct_df = node_support_df[node_support_df["Percent Mask"]==pct]
+    ax.scatter(pct_df[xlabel], pct_df[ylabel], color=color, label="{}% masked".format(pct), alpha=0.4, edgecolors='none')
+line_styles = {"color":'black', "linestyle":"--"}
+ax.axvline(bootstrap_cutoff, **line_styles)
+ax.axhline(bootstrap_cutoff, **line_styles)
+
+top_right_pct_nodes = high_support_df.shape[0]/node_support_df.shape[0]*100
+bottom_right_pct_nodes = whole_aln_support_df.shape[0]/node_support_df.shape[0]*100
+top_left_pct_nodes = masked_aln_support_df.shape[0]/node_support_df.shape[0]*100
+bottom_left_pct_nodes = low_support_df.shape[0]/node_support_df.shape[0]*100
+ax.text(bootstrap_cutoff+2, bootstrap_cutoff+2, "{:.1f}%".format(top_right_pct_nodes))
+ax.text(bootstrap_cutoff+2, 2, "{:.1f}%".format(bottom_right_pct_nodes))
+ax.text(2, bootstrap_cutoff+2, "{:.1f}%".format(top_left_pct_nodes))
+ax.text(2,2,"{:.1f}%".format(bottom_left_pct_nodes))
+
+ax.set_xlim([0, 102])
+ax.set_xlabel(xlabel)
+ax.set_ylim([0, 102])
+ax.set_ylabel(ylabel)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+plt.tight_layout()
+plt.savefig('plots/bootstrap_scatter.png')
