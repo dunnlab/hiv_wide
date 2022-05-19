@@ -14,6 +14,6 @@ RUN apt-get update && \
 # Install R packages
 RUN R -e "install.packages('BiocManager', dependencies=TRUE, repos='http://cran.rstudio.com/')"
 RUN R -e "install.packages('devtools', dependencies=TRUE, repos='http://cran.rstudio.com/')"
-RUN R -e "install.packages('tidytree', repos='http://cran.rstudio.com')"
+RUN R -e "install.packages(c('tidytree','ape','parallel'), repos='http://cran.rstudio.com')"
 
-RUN R -e "BiocManager::install('treeio, ggtree, ggtreeExtra')"
+RUN R -e "BiocManager::install(c('treeio', 'ggtree', 'ggtreeExtra'))"

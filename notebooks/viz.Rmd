@@ -1,0 +1,66 @@
+---
+title: "Vizes for HIV Wide"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(treeio)
+library(tidytree)
+library(ape)
+library(parallel)
+library(tidyverse)
+#library(future)
+#library(future.apply)
+#library(listenv)
+#plan(multisession)
+PATH="~/CORE/kantorlab/hiv_wide/"
+```
+
+# Overview
+
+We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
+
+```{r loadtree}
+treefiles <- list.files(file.path(PATH,"trees"),".fa.treefile",full.names=TRUE)
+trees <- lapply(treefiles, read.iqtree)
+phylos <- lapply(trees, function(x) x@phylo)
+bipartitions <- prop.part(phylos)
+```
+
+```{r get-bootstrap, eval=FALSE}
+labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]])
+
+# inputs:
+#   bipart - bipartition with labels
+#   t - tree index
+bootstrap_helper %<-% function(bipart, t) {
+    if(is.monophyletic(phylos[[t]],bipart)) {
+        mrca <- MRCA(trees[[t]], bipart)
+        boot <- dplyr::filter(trees[[t]]@data, node==mrca)$UFboot
+        return(list(bipart, boot))
+    }
+} 
+
+#bootstrap %<-% mclapply(labels, function(x) bootstrap_helper(x, 1))
+
+bootstrap <- function(t) {
+    mclapply(labels, function(x) bootstrap_helper(x, t), mc.cores=8)
+}
+
+all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
+```
+
+# Heatmap
+
+```{r heatmap}
+names(trees) <- c(90,80,70,60,50,40,30,20,10,0,100)
+heatmap_df <- lapply(trees, function(x) x@data) %>% bind_rows(.id="id")
+heatmap_df$id <- factor(heatmap_df$id, order=TRUE, levels=c(0,10,20,30,40,50,60,70,80,90,100))
+p <- ggplot(heatmap_df, aes(x=id,y=UFboot)) + geom_bin_2d() +
+    xlab("Percentage of whole genome") +
+    ylab("Bootstrap values") +
+    ggtitle("Heatmap of number of nodes with y bootstrap value in tree \n
+            with x percent of tips as whole genome sequences") +
+    guides(fill=guide_legend(title="Number of nodes"))
+ggplotly(p)
+```
