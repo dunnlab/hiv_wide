@@ -50,16 +50,47 @@ bootstrap <- function(t) {
 all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
 ```
 
+# Clustering pol phylogeny
+
+Idea was... we are going to cluster the pol tree and annotate on that plot made of the bootstraps. I had started with getting this analysis onto OOD through a Docker image, that I remember.
+
+```{r pol_tree, eval=FALSE}
+poltree <- trees[[10]]
+pol_bootstrap99 <- filter(poltree@data, UFboot > 99)$node
+copy_pol_bootstrap99 <- pol_bootstrap99
+# to cluster, for a given node with UFboot > 99, are its children also UFboot > 99?
+# we can start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
+i <- 1
+node <- pol_bootstrap99[i]
+while(!is.na(node)) {
+    subnodes <- offspring(poltree@phylo, node)
+    copy_pol_bootstrap99 <- copy_pol_bootstrap99[-which(copy_pol_bootstrap99 %in% subnodes)]
+    i <- i + 1
+    node <- copy_pol_bootstrap99[i]
+}
+```
+
+The code above is not really what we want because actually we want to delete the subnodes only if all of them have bootstrap > 99 (and aren't leaves). Otherwise we delete everything because the very first node is the entire tree and of course has bootstrap > 99. However maybe we should skip this in fact and just... generate the all_tree_bootstraps using OOD and a Docker image, which I still have to make.
+
 # Heatmap
 
 ```{r heatmap}
 names(trees) <- c(90,80,70,60,50,40,30,20,10,0,100)
 heatmap_df <- lapply(trees, function(x) x@data) %>% bind_rows(.id="id")
 heatmap_df$id <- factor(heatmap_df$id, order=TRUE, levels=c(0,10,20,30,40,50,60,70,80,90,100))
+heatmap_df <- mutate(heatmap_df, bootbins=case_when(
+    UFboot < 95 ~ "<95",
+    UFboot == 95 ~ "95",
+    UFboot == 96 ~ "96",
+    UFboot == 97 ~ "97",
+    UFboot == 98 ~ "98",
+    UFboot == 99 ~ "99",
+    UFboot == 100 ~ "100"
+))
 p <- ggplot(heatmap_df, aes(x=id,y=UFboot)) + geom_bin_2d() +
     xlab("Percentage of whole genome") +
     ylab("Bootstrap values") +
-    ggtitle("Heatmap of number of nodes with y bootstrap value in tree \n
+    ggtitle("Number of nodes with y bootstrap value in tree \n
             with x percent of tips as whole genome sequences") +
     guides(fill=guide_legend(title="Number of nodes"))
 ggplotly(p)
