@@ -1,6 +1,9 @@
 ---
 title: "Vizes for HIV Wide"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -9,14 +12,20 @@ library(tidytree)
 library(ape)
 library(parallel)
 library(tidyverse)
-#library(future)
-#library(future.apply)
+library(future)
+library(future.apply)
+library(plotly)
 #library(listenv)
-#plan(multisession)
-PATH="~/CORE/kantorlab/hiv_wide/"
+plan(multisession, workers=8)
+PATH="/gpfs/data/cbc/aguang/hiv_wide"
+setwd(PATH)
+#PATH="~/CORE/kantorlab/hiv_wide/"
+all_tree_bootstraps <- readRDS(file=file.path(PATH,"all_tree_bootstraps.rds"))
 ```
 
 # Overview
+
+## Making dataframe of bootstrap values
 
 We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
 
@@ -25,17 +34,17 @@ treefiles <- list.files(file.path(PATH,"trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
+labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]])
+treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 ```
 
 ```{r get-bootstrap, eval=FALSE}
-labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]])
-
 # inputs:
 #   bipart - bipartition with labels
 #   t - tree index
 bootstrap_helper %<-% function(bipart, t) {
     if(is.monophyletic(phylos[[t]],bipart)) {
-        mrca <- MRCA(trees[[t]], bipart)
+        mrca <- ggtree::MRCA(trees[[t]], bipart)
         boot <- dplyr::filter(trees[[t]]@data, node==mrca)$UFboot
         return(list(bipart, boot))
     }
@@ -44,11 +53,37 @@ bootstrap_helper %<-% function(bipart, t) {
 #bootstrap %<-% mclapply(labels, function(x) bootstrap_helper(x, 1))
 
 bootstrap <- function(t) {
-    mclapply(labels, function(x) bootstrap_helper(x, t), mc.cores=8)
+    future_lapply(labels, function(x) bootstrap_helper(x, t))
 }
 
 all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
+saveRDS(all_tree_bootstraps, file=file.path(PATH,"all_tree_bootstraps.rds"))
 ```
+
+```{r, make_data_frame}
+# it looks like each element in each list in all_tree_bootstraps is the same partition which is nice. So we want to save the name of the partition, and the number if it's the second value, or NA if it doesn't exist/the value is NULL
+
+# labels is the actual list of labels
+
+# in order to do that we have to first create a list replacement so that each element of the list has 2 elements itself
+replace_null <- function(x) {
+  # get number of NULL values in bootstrap list
+  num_null <- sapply(x, is.null) %>% sum()
+  # make list that we will use to replace, split forms them into pairs
+  list_replace <- rep(list(NA,NA), num_null)
+  list_replace <- split(list_replace, factor(c(1:num_null,1:num_null)))
+  
+  x[sapply(x,is.null)] <- list_replace
+  return(x)
+}
+
+only_bootstraps <- lapply(all_tree_bootstraps, function(x)
+  sapply(replace_null(x), "[[", 2))
+names(only_bootstraps) <- treenames
+bootstrap_df <- data.frame(only_bootstraps)
+```
+
+We keep the labels separate from the dataframe for now because the names are extremely messy to keep as rows.
 
 # Heatmap
 
