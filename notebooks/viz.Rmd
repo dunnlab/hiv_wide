@@ -89,7 +89,13 @@ We keep the labels separate from the dataframe for now because the names are ext
 
 Idea was... we are going to cluster the pol tree and annotate on that plot made of the bootstraps. I had started with getting this analysis onto OOD through a Docker image, that I remember.
 
+```{r pol_cluster, eval=FALSE}
+which(bootstrap_df$pol>99)
+```
+
 ```{r pol_tree, eval=FALSE}
+# spotchecking the results of this it does look ok but should still write a test tree and be careful...
+
 poltree <- trees[[10]]
 pol_bootstrap99 <- filter(poltree@data, UFboot > 99)$node
 copy_pol_bootstrap99 <- pol_bootstrap99
@@ -97,15 +103,37 @@ copy_pol_bootstrap99 <- pol_bootstrap99
 # we can start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
 i <- 1
 node <- pol_bootstrap99[i]
+tips <- 1:3860
+clusters <- c()
 while(!is.na(node)) {
     subnodes <- offspring(poltree@phylo, node)
-    copy_pol_bootstrap99 <- copy_pol_bootstrap99[-which(copy_pol_bootstrap99 %in% subnodes)]
+    subnodes <- subnodes[-which(subnodes %in% tips)] # remove tips
+    #print("subnodes")
+    #print(subnodes)
+    # if all subnodes are in the set of nodes with bootstrap > 99, delete the subnodes and add node
+    # to set of clusters
+    if (length(subnodes)==0) {
+      clusters <- c(clusters, node)
+    } else if (all(subnodes %in% pol_bootstrap99)) {
+      copy_pol_bootstrap99 <- copy_pol_bootstrap99[-which(copy_pol_bootstrap99 %in% subnodes)]
+      #print("copy_pol_bootstrap99")
+      #print(copy_pol_bootstrap99)
+      clusters <- c(clusters, node)
+    }
     i <- i + 1
     node <- copy_pol_bootstrap99[i]
+    #print(node)
 }
 ```
 
-The code above is not really what we want because actually we want to delete the subnodes only if all of them have bootstrap > 99 (and aren't leaves). Otherwise we delete everything because the very first node is the entire tree and of course has bootstrap > 99. However maybe we should skip this in fact and just... generate the all_tree_bootstraps using OOD and a Docker image, which I still have to make.
+Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically... if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
+
+Ah, but the pol tree has its own tips set...
+
+```{r pol_v_masked}
+wgsclades <- filter(bootstrap_df, !is.na(wgs))
+ggplot(bootstrap_df, )
+```
 
 # Heatmap
 
