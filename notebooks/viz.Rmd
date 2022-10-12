@@ -34,7 +34,7 @@ treefiles <- list.files(file.path(PATH,"trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
-labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]])
+labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]] %>% sort)
 treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 ```
 
@@ -81,6 +81,7 @@ only_bootstraps <- lapply(all_tree_bootstraps, function(x)
   sapply(replace_null(x), "[[", 2))
 names(only_bootstraps) <- treenames
 bootstrap_df <- data.frame(only_bootstraps)
+bootstrap_df$labelind <- 1:nrow(bootstrap_df)
 ```
 
 We keep the labels separate from the dataframe for now because the names are extremely messy to keep as rows.
@@ -124,6 +125,10 @@ while(!is.na(node)) {
     node <- copy_pol_bootstrap99[i]
     #print(node)
 }
+
+polclust_tips <- lapply(clusters, function(x) offspring(poltree@phylo, x, tiponly=TRUE))
+polclust_labels <- lapply(polclust_tips, function(x) poltree@phylo$tip.label[x] %>% sort)
+polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, identical, x)))
 ```
 
 Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically... if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
@@ -131,8 +136,27 @@ Ok, now that we have the clusters that are ID'd as transmission clusters in pol 
 Ah, but the pol tree has its own tips set...
 
 ```{r pol_v_masked}
-wgsclades <- filter(bootstrap_df, !is.na(wgs))
-ggplot(bootstrap_df, )
+wgsclades <- filter(bootstrap_df, !is.na(wgs)) %>%
+  pivot_longer(cols=wgs90:pol, names_to="tree",values_to="bootstrap")
+wgsclades$polclust <- wgsclades$labelind %in% polclust_index
+
+num_pol_in_wgs <- sum(polclust_index %in% wgsclades$labelind)
+num_pol_in_wgs
+num_pol_in_wgs/length(polclust_index) # proportion
+
+cc <- scales::seq_gradient_pal("white", "blue", "Lab")(seq(0,1,length.out=10))
+ggplot(wgsclades,
+       aes(x=wgs,y=bootstrap,color=tree), alpha=0.3) +
+    geom_jitter(data=filter(wgsclades,labelind %in% polclust_index),
+             aes(x=wgs,y=bootstrap),color="black",size=4.5,alpha=0.3) +
+    geom_jitter() +
+  scale_color_manual(values=cc, labels=c("pol", "wgs10-pol90", "wgs20-pol80",
+                                         "wgs30-pol70","wgs40-pol60","wgs50-pol50",
+                                         "wgs60-pol40","wgs70-pol30","wgs80-pol20",
+                                         "wgs90-pol10")) +
+  xlab("WGS Bootstrap") +
+  ylab("Mixture Bootstrap") +
+  ggtitle("WGS Bootstrap vs Mixture Bootstrap")
 ```
 
 # Heatmap
