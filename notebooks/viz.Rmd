@@ -25,6 +25,8 @@ all_tree_bootstraps <- readRDS(file=file.path(PATH,"all_tree_bootstraps.rds"))
 
 # Overview
 
+There are 11 trees that were built with iqtree from the T-shaped alignments. They constitute whole genome, 10% wgs-90% pol, 20% wgs-80% pol, and so on up until 100% pol. There are 3860 tips on these trees, which comprise multiple subtypes.
+
 ## Making dataframe of bootstrap values
 
 We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
@@ -88,13 +90,9 @@ We keep the labels separate from the dataframe for now because the names are ext
 
 # Clustering pol phylogeny
 
-Idea was... we are going to cluster the pol tree and annotate on that plot made of the bootstraps. I had started with getting this analysis onto OOD through a Docker image, that I remember.
+Idea was we are going to cluster the pol tree and annotate on that plot made of the bootstraps.
 
-```{r pol_cluster, eval=FALSE}
-which(bootstrap_df$pol>99)
-```
-
-```{r pol_tree, eval=FALSE}
+```{r pol_tree}
 # spotchecking the results of this it does look ok but should still write a test tree and be careful...
 
 poltree <- trees[[10]]
@@ -131,9 +129,7 @@ polclust_labels <- lapply(polclust_tips, function(x) poltree@phylo$tip.label[x] 
 polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, identical, x)))
 ```
 
-Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically... if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
-
-Ah, but the pol tree has its own tips set...
+Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
 
 ```{r pol_v_masked}
 wgsclades <- filter(bootstrap_df, !is.na(wgs)) %>%
@@ -157,6 +153,37 @@ ggplot(wgsclades,
   xlab("WGS Bootstrap") +
   ylab("Mixture Bootstrap") +
   ggtitle("WGS Bootstrap vs Mixture Bootstrap")
+```
+
+# Branch length distribution
+
+One idea was to look into the branch length distribution for the nodes that were in each quadrant to see if there was a relationship there. To do this we first split them into the different quadrants.
+
+```{r bl}
+zones <- mutate(wgsclades, zone = case_when(
+  wgs < 95 & bootstrap < 95 ~ "danger",
+  wgs > 95 & bootstrap < 95 ~ "wgshigh",
+  wgs > 95 & bootstrap > 95 ~ "allhigh",
+  wgs < 95 & bootstrap < 95 ~ "alllow"
+)) %>% filter(!is.na(zone))
+
+# we have a sad, because future_lapply doesn't work on offspring, same issue with the no applicable
+# method thing. Stop here for today.
+
+nodes_to_labels <- function(phylo, labels) {
+  future_sapply(3862:(3858+3860), function(z) {
+    print(z)
+    tipind <- tidytree::offspring(phylo, z, tiponly=TRUE) # get indices of tips
+    print(tipind)
+    labind <- phylo$tip.label[tipind] %>% sort %>% # get labels of tips
+      sapply(labels, identical, .) %>%
+      which # get index of clade in labels vector
+  })
+}
+
+multiphylos <- c(rtree(10),rtree(10))
+
+ggplot(as_tibble(phylos[[3]]), aes(x=branch.length)) + geom_histogram()
 ```
 
 # Heatmap
