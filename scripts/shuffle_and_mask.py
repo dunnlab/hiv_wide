@@ -57,7 +57,6 @@ def generate_sequences(seqs_dict, id_list, n_to_mask, mask_char, start, stop):
         else:
             yield seqs_dict[seq_id]
 
-
 matrix_in = path.abspath(sys.argv[1])
 out_dir = path.abspath(sys.argv[2])
 out_prefix = path.join(out_dir, path.splitext(path.basename(matrix_in))[0])

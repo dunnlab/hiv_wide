@@ -9,7 +9,14 @@ RUN apt-get update && \
 	apt-get -y --no-install-recommends install --fix-missing \
         libglpk-dev \
         libxt-dev \
+        openjdk-11-jdk \
+        ca-certificates-java \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64/
+RUN export JAVA_HOME
+
+RUN wget https://hiv.bio.ed.ac.uk/clusterPicker/ClusterPicker_1.2.3.jar
 
 # Install R packages
 RUN R -e "install.packages('BiocManager', dependencies=TRUE, repos='http://cran.rstudio.com/')"
