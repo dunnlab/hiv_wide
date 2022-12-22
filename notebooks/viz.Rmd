@@ -15,30 +15,32 @@ library(tidyverse)
 library(future)
 library(future.apply)
 library(plotly)
+library(reshape)
 #library(listenv)
 plan(multisession, workers=8)
 PATH="/gpfs/data/cbc/aguang/hiv_wide"
 setwd(PATH)
 #PATH="~/CORE/kantorlab/hiv_wide/"
-all_tree_bootstraps <- readRDS(file=file.path(PATH,"all_tree_bootstraps.rds"))
+all_tree_bootstraps <-
+  readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
 ```
 
-# Overview
-
-There are 11 trees that were built with iqtree from the T-shaped alignments. They constitute whole genome, 10% wgs-90% pol, 20% wgs-80% pol, and so on up until 100% pol. There are 3860 tips on these trees, which comprise multiple subtypes.
-
-## Making dataframe of bootstrap values
-
-We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
-
-```{r loadtree}
-treefiles <- list.files(file.path(PATH,"trees"),".fa.treefile",full.names=TRUE)
+```{r loadtree, include=FALSE}
+treefiles <- list.files(file.path(PATH,"results/trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
 labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]] %>% sort)
 treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 ```
+
+# Overview
+
+There are 11 trees that were built with iqtree from the T-shaped alignments. They constitute whole genome, 10% wgs-90% pol, 20% wgs-80% pol, and so on up until 100% pol. There are `r length(trees[[1]]@phylo$tip.label)` tips on these trees, which comprise all subtype B.
+
+## Making dataframe of bootstrap values
+
+We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
 
 ```{r get-bootstrap, eval=FALSE}
 # inputs:
@@ -59,7 +61,7 @@ bootstrap <- function(t) {
 }
 
 all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
-saveRDS(all_tree_bootstraps, file=file.path(PATH,"all_tree_bootstraps.rds"))
+saveRDS(all_tree_bootstraps, file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
 ```
 
 ```{r, make_data_frame}
@@ -88,11 +90,22 @@ bootstrap_df$labelind <- 1:nrow(bootstrap_df)
 
 We keep the labels separate from the dataframe for now because the names are extremely messy to keep as rows.
 
-# Clustering pol phylogeny
+## How similar are the trees?
+
+As a quick sanity check, we compute the RF distance between all of our phylogenetic trees and create a sample-to-sample heatmap for them. It does appear that the pol tree is most similar to the pol10-wgs90 tree, and that the RF distance increases as the wgs proportion increases.
+
+```{r, rf_dist}
+just_trees <- lapply(trees, function(x) x@phylo)[c(11,1,2,3,4,5,6,7,8,9,10)]
+class(just_trees) <- "multiPhylo"
+tree_rfdist <- dist.topo(just_trees)
+ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) + coord_fixed() + scale_fill_viridis_c()
+```
+
+# How many clusters from pol have high support in the wgs tree?
 
 Idea was we are going to cluster the pol tree and annotate on that plot made of the bootstraps.
 
-```{r pol_tree}
+```{r pol_clusters}
 # spotchecking the results of this it does look ok but should still write a test tree and be careful...
 
 poltree <- trees[[10]]
@@ -131,14 +144,14 @@ polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, ident
 
 Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
 
+There are `r length(polclust_index)` clusters in the pol tree, and `r num_pol_in_wgs` of them are in the wgs tree, which works out to `r num_pol_in_wgs/length(polclust_index)` of them.
+
 ```{r pol_v_masked}
 wgsclades <- filter(bootstrap_df, !is.na(wgs)) %>%
   pivot_longer(cols=wgs90:pol, names_to="tree",values_to="bootstrap")
 wgsclades$polclust <- wgsclades$labelind %in% polclust_index
 
 num_pol_in_wgs <- sum(polclust_index %in% wgsclades$labelind)
-num_pol_in_wgs
-num_pol_in_wgs/length(polclust_index) # proportion
 
 cc <- scales::seq_gradient_pal("white", "blue", "Lab")(seq(0,1,length.out=10))
 ggplot(wgsclades,
@@ -154,6 +167,80 @@ ggplot(wgsclades,
   ylab("Mixture Bootstrap") +
   ggtitle("WGS Bootstrap vs Mixture Bootstrap")
 ```
+
+This plot is not so informative, unfortunately I think.
+
+## How many pol clusters are ID'd on the different trees and what are their bootstrap values?
+
+```{r heatmap_polclust_bootstrap, fig.cap="Bootstrap values of pol clusters on different trees. pol clusters that were not found on the tree were counted as NA. After wgs10, the wgs tree had the most clades shared with the pol clusters with a high bootstrap value.}
+bootstrap_df_polclustonly <- filter(bootstrap_df, labelind %in% polclust_index) %>%
+  pivot_longer(wgs90:wgs, names_to="tree", values_to="bootstrap") %>%
+  mutate(bootbins=case_when(
+    bootstrap < 95 ~ "<95",
+    bootstrap == 95 ~ "95",
+    bootstrap == 96 ~ "96",
+    bootstrap == 97 ~ "97",
+    bootstrap == 98 ~ "98",
+    bootstrap == 99 ~ "99",
+    bootstrap == 100 ~ "100",
+    is.na(bootstrap) ~ 'NA'
+))
+ggplot(bootstrap_df_polclustonly, aes(x=factor(tree, level=c('pol','wgs10','wgs20','wgs30','wgs40','wgs50','wgs60','wgs70','wgs80','wgs90','wgs')),y=factor(bootbins,level=c('NA','<95','95','96','97','98','99','100')))) +
+  geom_bin_2d() + scale_fill_viridis_c() +
+    guides(fill=guide_legend(title="Number of nodes")) +
+  stat_bin_2d(geom="text",aes(label=..count..)) + 
+  xlab("Tree") +
+  ylab("Bootstrap") +
+  ggtitle("Bootstrap values of pol clusters on different tree mixtures") +
+  labs(caption = "clusters not found on tree were counted as NA")
+```
+
+It looks like 
+
+## What about wgs clusters?
+
+todo: cluster all of them by bootstrap value and then do an upset plot comparing them
+
+```{r wgs_clusters}
+# spotchecking the results of this it does look ok but should still write a test tree and be careful...
+
+poltree <- trees[[10]]
+pol_bootstrap99 <- filter(poltree@data, UFboot > 99)$node
+copy_pol_bootstrap99 <- pol_bootstrap99
+# to cluster, for a given node with UFboot > 99, are its children also UFboot > 99?
+# we can start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
+i <- 1
+node <- pol_bootstrap99[i]
+tips <- 1:3860
+clusters <- c()
+while(!is.na(node)) {
+    subnodes <- offspring(poltree@phylo, node)
+    subnodes <- subnodes[-which(subnodes %in% tips)] # remove tips
+    #print("subnodes")
+    #print(subnodes)
+    # if all subnodes are in the set of nodes with bootstrap > 99, delete the subnodes and add node
+    # to set of clusters
+    if (length(subnodes)==0) {
+      clusters <- c(clusters, node)
+    } else if (all(subnodes %in% pol_bootstrap99)) {
+      copy_pol_bootstrap99 <- copy_pol_bootstrap99[-which(copy_pol_bootstrap99 %in% subnodes)]
+      #print("copy_pol_bootstrap99")
+      #print(copy_pol_bootstrap99)
+      clusters <- c(clusters, node)
+    }
+    i <- i + 1
+    node <- copy_pol_bootstrap99[i]
+    #print(node)
+}
+
+polclust_tips <- lapply(clusters, function(x) offspring(poltree@phylo, x, tiponly=TRUE))
+polclust_labels <- lapply(polclust_tips, function(x) poltree@phylo$tip.label[x] %>% sort)
+polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, identical, x)))
+```
+
+# How many nodes share strong support between pol & whole genome vs between pol & not wgs?
+
+This is a slightly different question from identified clusters, as we simply look at which nodes share strong support between pol and whole genome as well as between pol and different degrees of wgs. Strong support is defined as bootstrap of 99
 
 # Branch length distribution
 
