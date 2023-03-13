@@ -23,20 +23,40 @@ setwd(PATH)
 #PATH="~/CORE/kantorlab/hiv_wide/"
 all_tree_bootstraps <-
   readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
+adists <- readRDS(file=file.path(PATH,"alignment_dists.rds"))
 ```
 
 ```{r loadtree, include=FALSE}
 treefiles <- list.files(file.path(PATH,"results/trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
+names(trees) <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
 labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]] %>% sort)
 treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 ```
 
+```{r clusterpicker_load, include=FALSE}
+CLUSTER_PATH = file.path(PATH,"results/clusterpicker")
+polclust_99_045 <- read.csv(file.path(CLUSTER_PATH, "HIV1_FLT_2018_genome_DNA_subtypeB_mask100_clusterPicks_list.txt"), sep="\t")
+```
+
+```{r alignment_load, include=FALSE, eval=FALSE}
+ALIGNMENT_PATH = file.path(PATH,"results/alignments")
+alignmentfiles <- list.files(ALIGNMENT_PATH, ".fa$", full.names=TRUE)
+alignments <- lapply(alignmentfiles, read.FASTA)
+names(alignments) <- treenames
+adists <- future_lapply(alignments, function(x) dist.dna(x, model="TN93"))
+saveRDS(adists, file=file.path(PATH,"alignment_dists.rds"))
+```
+
 # Overview
 
 There are 11 trees that were built with iqtree from the T-shaped alignments. They constitute whole genome, 10% wgs-90% pol, 20% wgs-80% pol, and so on up until 100% pol. There are `r length(trees[[1]]@phylo$tip.label)` tips on these trees, which comprise all subtype B.
+
+# Findings
+
+ * In terms of congruence between `pol` and the mixtures with clusters identified with pol, there is a dip to `wgs60`, and then congruence increases again. (Figures \@ref(fig:lineplot-clusterpicker) and \@ref(fig:heatmap-clusterpicker-bootstrap))
 
 ## Making dataframe of bootstrap values
 
@@ -94,8 +114,8 @@ We keep the labels separate from the dataframe for now because the names are ext
 
 As a quick sanity check, we compute the RF distance between all of our phylogenetic trees and create a sample-to-sample heatmap for them. It does appear that the pol tree is most similar to the pol10-wgs90 tree, and that the RF distance increases as the wgs proportion increases.
 
-```{r, rf_dist}
-just_trees <- lapply(trees, function(x) x@phylo)[c(11,1,2,3,4,5,6,7,8,9,10)]
+```{r, rf_dist, fig.cap="Sample to sample RF distances between all phylogenetic trees. Closer to yellow is farther away, and closer to green is closer.", warning=FALSE}
+just_trees <- phylos[c(11,1,2,3,4,5,6,7,8,9,10)]
 class(just_trees) <- "multiPhylo"
 tree_rfdist <- dist.topo(just_trees)
 ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) + coord_fixed() + scale_fill_viridis_c()
@@ -142,22 +162,32 @@ polclust_labels <- lapply(polclust_tips, function(x) poltree@phylo$tip.label[x] 
 polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, identical, x)))
 ```
 
-Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
+## Clusterpicker
 
-There are `r length(polclust_index)` clusters in the pol tree, and `r num_pol_in_wgs` of them are in the wgs tree, which works out to `r num_pol_in_wgs/length(polclust_index)` of them.
+We also ID pol clusters using clusterpicker and a genetic distance of 0.045 along with a bootstrap value of 99. There are `r max(polclust_99_045$ClusterNumber)` clusters ID'd that way.
 
-```{r pol_v_masked}
+```{r clusterpicker, warning=FALSE}
+clusters_99_045_labels <- filter(polclust_99_045, ClusterNumber != -1) %>% group_by(ClusterNumber) %>% summarise(SequenceName = paste0(SequenceName, collapse=" ")) %>% .$SequenceName
+clusters_99_045_labels <- lapply(clusters_99_045_labels, function(x) strsplit(x, " ")[[1]] %>% sort())
+clusters_99_045_index <- sapply(clusters_99_045_labels, function(x) which(sapply(labels, identical, x)))
+```
+
+```{r pol-v-masked, warning=FALSE}
 wgsclades <- filter(bootstrap_df, !is.na(wgs)) %>%
   pivot_longer(cols=wgs90:pol, names_to="tree",values_to="bootstrap")
-wgsclades$polclust <- wgsclades$labelind %in% polclust_index
+wgsclades$polclust_99 <- wgsclades$labelind %in% polclust_index
+wgsclades$polclust_99_045 <- wgsclades$labelind %in% clusters_99_045_index
 
 num_pol_in_wgs <- sum(polclust_index %in% wgsclades$labelind)
+num_pol99_045_in_wgs <- sum(clusters_99_045_index %in% wgsclades$labelind)
 
 cc <- scales::seq_gradient_pal("white", "blue", "Lab")(seq(0,1,length.out=10))
 ggplot(wgsclades,
        aes(x=wgs,y=bootstrap,color=tree), alpha=0.3) +
     geom_jitter(data=filter(wgsclades,labelind %in% polclust_index),
-             aes(x=wgs,y=bootstrap),color="black",size=4.5,alpha=0.3) +
+             aes(x=wgs,y=bootstrap),color="black",size=4.5,alpha=0.5) +
+    geom_jitter(data=filter(wgsclades,labelind %in% clusters_99_045_index),
+                aes(x=wgs,y=bootstrap),color="red",size=4.5,alpha=0.5) + 
     geom_jitter() +
   scale_color_manual(values=cc, labels=c("pol", "wgs10-pol90", "wgs20-pol80",
                                          "wgs30-pol70","wgs40-pol60","wgs50-pol50",
@@ -168,11 +198,15 @@ ggplot(wgsclades,
   ggtitle("WGS Bootstrap vs Mixture Bootstrap")
 ```
 
-This plot is not so informative, unfortunately I think.
+Ok, now that we have the clusters that are ID'd as transmission clusters in pol with a 99% bootstrap cutoff, we want to label them on the whole genome vs proportion plot. First we want to recreate that plot using ggplot though. Basically if a clade is in the whole alignment, plot its bootstrap value as well as any for the other trees.
+
+There are `r length(polclust_index)` clusters in the pol tree, and `r num_pol_in_wgs` of them are in the wgs tree, which works out to `r num_pol_in_wgs/length(polclust_index)` of them.
+
+This plot is not so informative \@ref(fig:pol-v-masked), unfortunately I think.
 
 ## How many pol clusters are ID'd on the different trees and what are their bootstrap values?
 
-```{r heatmap_polclust_bootstrap, fig.cap="Bootstrap values of pol clusters on different trees. pol clusters that were not found on the tree were counted as NA. After wgs10, the wgs tree had the most clades shared with the pol clusters with a high bootstrap value.}
+```{r heatmap_polclust_bootstrap, fig.cap="Bootstrap values of pol clusters on different trees. pol clusters that were not found on the tree were counted as NA. After wgs10, the wgs tree had the most clades shared with the pol clusters with a high bootstrap value."}
 bootstrap_df_polclustonly <- filter(bootstrap_df, labelind %in% polclust_index) %>%
   pivot_longer(wgs90:wgs, names_to="tree", values_to="bootstrap") %>%
   mutate(bootbins=case_when(
@@ -195,7 +229,68 @@ ggplot(bootstrap_df_polclustonly, aes(x=factor(tree, level=c('pol','wgs10','wgs2
   labs(caption = "clusters not found on tree were counted as NA")
 ```
 
-It looks like 
+```{r heatmap-clusterpicker-bootstrap, fig.cap="Bootstrap values of pol clusters from clusterpicker with 0.045 genetic distance on different trees. pol clusters that were not found on the tree were counted as NA. After wgs10, the wgs tree had the most clades shared with the pol clusters with a high bootstrap value."}
+bootstrap_df_clusterpickeronly <- filter(bootstrap_df, labelind %in% clusters_99_045_index) %>%
+  pivot_longer(wgs90:wgs, names_to="tree", values_to="bootstrap") %>%
+  mutate(bootbins=case_when(
+    bootstrap < 95 ~ "<95",
+    bootstrap == 95 ~ "95",
+    bootstrap == 96 ~ "96",
+    bootstrap == 97 ~ "97",
+    bootstrap == 98 ~ "98",
+    bootstrap == 99 ~ "99",
+    bootstrap == 100 ~ "100",
+    is.na(bootstrap) ~ 'NA'
+))
+ggplot(bootstrap_df_clusterpickeronly, aes(x=factor(tree, level=c('pol','wgs10','wgs20','wgs30','wgs40','wgs50','wgs60','wgs70','wgs80','wgs90','wgs')),y=factor(bootbins,level=c('NA','<95','95','96','97','98','99','100')))) +
+  geom_bin_2d() + scale_fill_viridis_c() +
+    guides(fill=guide_legend(title="Number of nodes")) +
+  stat_bin_2d(geom="text",aes(label=..count..)) + 
+  xlab("Tree") +
+  ylab("Bootstrap") +
+  ggtitle("Bootstrap values of pol clusters with 0.045 genetic distance and 99 bootstrap on different tree mixtures") +
+  labs(caption = "clusters not found on tree were counted as NA")
+```
+
+The lineplot (Figure~\@ref(fig:lineplot-clusterpicker)) is the same data as the heatmap, but I only plotted as a line the clades on the tree that are >99, and then those that are NA.
+
+```{r lineplot-clusterpicker, fig.cap="Number of clusters from clusterpicker with 0.045 and 99% bootstrap on each tree"}
+lineplot_df_clusterpicker <- bootstrap_df_clusterpickeronly %>% filter(bootstrap >= 99 | is.na(bootstrap)) %>% transmute(tree=tree, bootbins2=case_when(bootstrap >= 99 ~ ">99")) %>% count(tree, bootbins2)
+ggplot(lineplot_df_clusterpicker, aes(x=factor(tree, level=c('pol','wgs10','wgs20','wgs30','wgs40','wgs50','wgs60','wgs70','wgs80','wgs90','wgs')), y=n)) + geom_line(aes(color=bootbins2, group=bootbins2)) +
+  xlab("Tree") +
+  ylab("Count") +
+  guides(color=guide_legend(title="Bootstrap value of node")) +
+  ggtitle("Number of clades from pol tree with given bootstrap value (>99 or NA) on each tree")
+```
+
+So I think there is definitely low congruence between the pol tree and the wgs tree. Some other notes:
+
+ * There are `r filter(bootstrap_df_clusterpickeronly, !is.na(bootstrap)) %>% count(labelind) %>% filter(n==11) %>% nrow()` clusters identified with clusterpicker (0.045 genetic distance and 99%) bootstrap that are present across all trees.
+
+## What's the reason for the low congruence?
+
+Possible explanations:
+
+ * Alignment with env is difficult and impacts answer. Would need to do realignment without env gene.
+ * Some relationship between the number of sequences and the number of clusters, i.e. using less or more sequences will change the congruence
+ 
+
+### Genetic distance plots
+
+One idea we had was to plot the genetic distance of the pol clades. We compute the genetic distance using the TN93 model, and look at the maximum genetic distance in a given cluster (Chosen based on clusterpicker paper) and then plot the genetic distance distributions for pol for those with:
+
+ * Bootstrap > 95% in tree
+ * Bootstrap <= 95% in tree
+ * non existent in tree
+
+```{r gendist-clusterpicker}
+```
+
+### What happened to the clusters that aren't in the wgs trees at all?
+
+```{r clusternotinwgs}
+labels[filter(bootstrap_df_clusterpickeronly, is.na(bootstrap) & tree=="wgs")$labelind]
+```
 
 ## What about wgs clusters?
 
@@ -258,7 +353,7 @@ zones <- mutate(wgsclades, zone = case_when(
 # method thing. Stop here for today.
 
 nodes_to_labels <- function(phylo, labels) {
-  future_sapply(3862:(3858+3860), function(z) {
+  sapply(3862:(3858+3860), function(z) {
     print(z)
     tipind <- tidytree::offspring(phylo, z, tiponly=TRUE) # get indices of tips
     print(tipind)
@@ -296,3 +391,15 @@ p <- ggplot(heatmap_df, aes(x=id,y=UFboot)) + geom_bin_2d() +
     guides(fill=guide_legend(title="Number of nodes"))
 ggplotly(p)
 ```
+
+## Suggestions that have been given
+
+ * How many nodes share strong support between pol & whole genome vs between pol & not-whole genome?
+ * Env gene is extremely variable and aligning it could be very challenging, and will impact answer
+    * Different approaches to deal with env, strip variable regions and leave conserved regions
+    * If we exclude env when we align, do the trees become more consistent?
+ * How does pattern change if we align with less sequences or with more sequences? In general there is a linear correlation with the number of clusters. How do these parameters get affected with the total size of the samples? With different cluster sizes, will the threshold drop or increase?
+ * When we have lower bootstraps, what exactly happened to the disappearing clusters?
+ * (I don't remember what this means anymore) - Another point - if already have full length genome aligned for all sequences. When talk about pol mean protease + RT, one Q is whether can concatenate the PRT region with integrate region or use entire pol (3kb) rather than 1kb (prrt), whether have different patterns. 3kb is closer to 9kb as compared with full length genome
+	Vlad’s prediction - go from very short region, differences with full-length genome might be diminishing
+	Relatively easy to do, add something in middle
