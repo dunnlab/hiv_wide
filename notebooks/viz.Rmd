@@ -1,7 +1,7 @@
 ---
 title: "Vizes for HIV Wide"
 output:
-  html_document:
+  bookdown::html_document2:
     df_print: paged
     code_folding: hide
 ---
@@ -274,23 +274,89 @@ Possible explanations:
  * Alignment with env is difficult and impacts answer. Would need to do realignment without env gene.
  * Some relationship between the number of sequences and the number of clusters, i.e. using less or more sequences will change the congruence
  
-
 ### Genetic distance plots
 
 One idea we had was to plot the genetic distance of the pol clades. We compute the genetic distance using the TN93 model, and look at the maximum genetic distance in a given cluster (Chosen based on clusterpicker paper) and then plot the genetic distance distributions for pol for those with:
 
- * Bootstrap > 95% in tree
- * Bootstrap <= 95% in tree
- * non existent in tree
+ * Bootstrap >= 95% in tree
+ * Bootstrap < 95% in tree
+ * Non existent in tree
 
-```{r gendist-clusterpicker}
+```{r gendist-clusterpicker-wgs}
+bootstrap_ge95_wgs <- labels[filter(bootstrap_df_clusterpickeronly, tree=="wgs" & bootstrap>=95)$labelind]
+bootstrap_l95_wgs <- labels[filter(bootstrap_df_clusterpickeronly, tree=="wgs" & bootstrap<95)$labelind]
+bootstrap_na_wgs <- labels[filter(bootstrap_df_clusterpickeronly, is.na(bootstrap) & tree=="wgs")$labelind]
+
+# Given list of cluster labels and ape.dist object, compute maximum genetic distance
+# for given cluster
+max_gendist <- function(clusters, dist) {
+  sapply(clusters, function(x) max_gendist_helper(x, dist))
+}
+
+max_gendist_helper <- function(cluster, dist) {
+  i <- which(rownames(dist) %in% cluster) # find rows with cluster label
+  combos <- combn(i, 2) # make all combos of 2
+  d <- dist[t(combos)] # get distances for all combos (goes by 2)
+  return(max(d))
+}
+
+dists_ge95_wgs <- max_gendist(bootstrap_ge95_wgs, adists$wgs)
+dists_l95_wgs <- max_gendist(bootstrap_l95_wgs, adists$wgs)
+dists_na_wgs <- max_gendist(bootstrap_na_wgs, adists$wgs)
+dist_df <- data.frame(cat=c(rep(">=95 bootstrap", length(dists_ge95_wgs)),
+                            rep("<95 bootstrap", length(dists_l95_wgs)),
+                            rep("NA", length(dists_na_wgs))),
+                      dist=c(dists_ge95_wgs,dists_l95_wgs,dists_na_wgs))
+#ggplot(dist_df, aes(x=dist)) + geom_freqpoly(aes(color=cat))
+```
+
+```{r gendist-clusterpicker-rest, fig.cap="Frequency of genetic distance on each tree of pol clusters with genetic distance 0.045 and bootstrap 99. Clusters were divided into three categories: green is those with >=95 bootstrap on the given tree, red is those with <95 bootstrap, and blue is those not found in the given tree."}
+# contains for wgs as well, a bit redundant but it's fine
+dist_mask_df_list <- lapply(treenames[c(1:9,11)], function(x) {
+  bge95 <- labels[filter(bootstrap_df_clusterpickeronly, tree==x & bootstrap>=95)$labelind]
+  bl95 <- labels[filter(bootstrap_df_clusterpickeronly, tree==x & bootstrap<95)$labelind]
+  bna <- labels[filter(bootstrap_df_clusterpickeronly, is.na(bootstrap) & tree==x)$labelind]
+  
+  dge95 <- max_gendist(bge95, adists[[x]])
+  dl95 <- max_gendist(bl95, adists[[x]])
+  dna <- max_gendist(bna, adists[[x]])
+  return(data.frame(cat=c(rep(">=95 bootstrap", length(dge95)),
+                            rep("<95 bootstrap", length(dl95)),
+                            rep("NA", length(dna))),
+                      dist=c(dge95,dl95,dna)))
+}
+  )
+names(dist_mask_df_list) <- treenames[c(1:9,11)]
+dist_df <- bind_rows(dist_mask_df_list, .id="tree")
+ggplot(dist_df, aes(x=dist)) + geom_freqpoly(aes(color=cat)) + facet_wrap(vars(tree)) +
+  geom_vline(xintercept=0.045, linetype=3) +
+  ggtitle("Frequency of genetic distance for pol clusters on a given tree")
+```
+
+Figure \@ref(fig:gendist-clusterpicker-rest) shows these genetic distance distributions. It seems interesting that most of the clusters not found on the whole genome tree actually also have greater genetic distance, while for the other trees genetic distance for clusters with >=95 bootstrap and clusters not present is pretty much the same.
+
+```{r gendist-clusterpicker-99, eval=FALSE}
+# redo for bootstrap >=99
+dist_mask_df_list <- lapply(treenames[c(1:9,11)], function(x) {
+  bge95 <- labels[filter(bootstrap_df_clusterpickeronly, tree==x & bootstrap>=99)$labelind]
+  bl95 <- labels[filter(bootstrap_df_clusterpickeronly, tree==x & bootstrap<99)$labelind]
+  bna <- labels[filter(bootstrap_df_clusterpickeronly, is.na(bootstrap) & tree==x)$labelind]
+  
+  dge95 <- max_gendist(bge95, adists[[x]])
+  dl95 <- max_gendist(bl95, adists[[x]])
+  dna <- max_gendist(bna, adists[[x]])
+  return(data.frame(cat=c(rep(">=95 bootstrap", length(dge95)),
+                            rep("<95 bootstrap", length(dl95)),
+                            rep("NA", length(dna))),
+                      dist=c(dge95,dl95,dna)))
+}
+  )
+names(dist_mask_df_list) <- treenames[c(1:9,11)]
+dist_df_99 <- bind_rows(dist_mask_df_list, .id="tree")
+ggplot(dist_df_99, aes(x=dist)) + geom_freqpoly(aes(color=cat)) + facet_wrap(vars(tree))
 ```
 
 ### What happened to the clusters that aren't in the wgs trees at all?
-
-```{r clusternotinwgs}
-labels[filter(bootstrap_df_clusterpickeronly, is.na(bootstrap) & tree=="wgs")$labelind]
-```
 
 ## What about wgs clusters?
 
