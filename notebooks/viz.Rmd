@@ -9,6 +9,7 @@ output:
 ```{r setup, include=FALSE}
 library(treeio)
 library(tidytree)
+library(ggtree)
 library(ape)
 library(parallel)
 library(tidyverse)
@@ -24,6 +25,11 @@ setwd(PATH)
 all_tree_bootstraps <-
   readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
 adists <- readRDS(file=file.path(PATH,"alignment_dists.rds"))
+
+ALIGNMENT_PATH = file.path(PATH,"results/alignments")
+alignmentfiles <- list.files(ALIGNMENT_PATH, ".fa$", full.names=TRUE)
+alignments <- lapply(alignmentfiles, read.FASTA)
+names(alignments) <- treenames
 ```
 
 ```{r loadtree, include=FALSE}
@@ -42,10 +48,6 @@ polclust_99_045 <- read.csv(file.path(CLUSTER_PATH, "HIV1_FLT_2018_genome_DNA_su
 ```
 
 ```{r alignment_load, include=FALSE, eval=FALSE}
-ALIGNMENT_PATH = file.path(PATH,"results/alignments")
-alignmentfiles <- list.files(ALIGNMENT_PATH, ".fa$", full.names=TRUE)
-alignments <- lapply(alignmentfiles, read.FASTA)
-names(alignments) <- treenames
 adists <- future_lapply(alignments, function(x) dist.dna(x, model="TN93"))
 saveRDS(adists, file=file.path(PATH,"alignment_dists.rds"))
 ```
@@ -456,6 +458,57 @@ p <- ggplot(heatmap_df, aes(x=id,y=UFboot)) + geom_bin_2d() +
             with x percent of tips as whole genome sequences") +
     guides(fill=guide_legend(title="Number of nodes"))
 ggplotly(p)
+```
+
+# In wgs50, do pol and wgs tips cluster together?
+
+To answer this question, we first visually inspect the tree by coloring the tips that are wgs and those that are pol. From looking at the alignment visually we find that the first wgs sequence in the alignment is >B.CN.02.02HNsc11.DQ007903, so everything before it is a pol sequence and everything after is wgs. This can be confirmed computationally in the alignments by finding the sequences where the first 1000 characters are not 04, which indicates wgs, with the rest being pol as well. However we will not do that all here though we will check a few.
+
+```{r wgs50}
+wgs50 <- trees[[5]]
+wgs50align <- alignments$wgs50
+alignmentnames <- names(alignments$wgs50)
+firstwgs <- which(alignmentnames=="B.CN.02.02HNsc11.DQ007903")
+polseqs <- alignmentnames[1:firstwgs-1]
+wgsseqs <- alignmentnames[firstwgs:length(alignmentnames)]
+# check last one of polseqs and random one
+stopifnot(wgs50align[[polseqs[599]]][1:1000]==04)
+stopifnot(wgs50align[[polseqs[300]]][1:1000]==04)
+# check first, last, random wgsseq
+stopifnot(!all(wgs50align[[wgsseqs[1]]][1:1000]==04))
+stopifnot(!all(wgs50align[[wgsseqs[597]]][1:1000]==04))
+stopifnot(!all(wgs50align[[wgsseqs[399]]][1:1000]==04))
+seqtypedf <- data.frame(labels=alignmentnames, type=alignmentnames)
+seqtypedf$type[seqtypedf$type %in% polseqs]<-"pol"
+seqtypedf$type[seqtypedf$type %in% wgsseqs]<-"wgs"
+testdf <- data.frame(labels=alignmentnames,dummy_bar_value=rep(1,length(alignmentnames)))
+p2 <- ggtree(wgs50) %<+% seqtypedf + geom_tippoint(aes(color=type))
+p2 + geom_facet(panel="Type",data=testdf,geom=geom_col,aes(x=dummy_bar_value,color=type,fill=type),orientation='y')
+```
+
+The result seems pretty evenly mixed actually, which is tough. We will try a phylogenetic trait association test.
+
+```{r wgs10, eval=FALSE}
+# just checking to see if at wgs10 they maybe cluster on their own
+wgs10 <- trees[[9]]
+wgs10align <- alignments$wgs10
+alignmentnames <- names(alignments$wgs10)
+firstwgs <- which(alignmentnames=="B.JP.05.436.AB428557")
+polseqs <- alignmentnames[1:firstwgs-1]
+wgsseqs <- alignmentnames[firstwgs:length(alignmentnames)]
+# check last one of polseqs and random one
+stopifnot(wgs10align[[polseqs[firstwgs-1]]][1:1500]==04)
+stopifnot(wgs10align[[polseqs[100]]][1:1500]==04)
+# check first, last, random wgsseq
+stopifnot(!all(wgs10align[[wgsseqs[1]]][1:2000]==04))
+stopifnot(!all(wgs10align[[wgsseqs[length(wgsseqs)]]][1:2000]==04))
+stopifnot(!all(wgs10align[[wgsseqs[100]]][1:2000]==04))
+seqtypedf <- data.frame(labels=alignmentnames, type=alignmentnames)
+seqtypedf$type[seqtypedf$type %in% polseqs]<-"pol"
+seqtypedf$type[seqtypedf$type %in% wgsseqs]<-"wgs"
+testdf <- data.frame(labels=alignmentnames,dummy_bar_value=rep(1,length(alignmentnames)))
+p2 <- ggtree(wgs10) %<+% seqtypedf + geom_tippoint(aes(color=type))
+p2 + geom_facet(panel="Type",data=testdf,geom=geom_col,aes(x=dummy_bar_value,color=type,fill=type),orientation='y')
 ```
 
 ## Suggestions that have been given
