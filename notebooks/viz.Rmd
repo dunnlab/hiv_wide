@@ -511,6 +511,60 @@ p2 <- ggtree(wgs10) %<+% seqtypedf + geom_tippoint(aes(color=type))
 p2 + geom_facet(panel="Type",data=testdf,geom=geom_col,aes(x=dummy_bar_value,color=type,fill=type),orientation='y')
 ```
 
+```{r wgs50_clust}
+# spotchecking the results of this it does look ok but should still write a test tree and be careful...
+
+wgs50_bootstrap99 <- filter(wgs50@data, UFboot > 99)$node
+copy_wgs50_bootstrap99 <- wgs50_bootstrap99
+# to cluster, for a given node with UFboot > 99, are its children also UFboot > 99?
+# we can start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
+i <- 1
+node <- wgs50_bootstrap99[i]
+tips <- 1:3860
+clusters <- c()
+while(!is.na(node)) {
+    subnodes <- offspring(wgs50@phylo, node)
+    subnodes <- subnodes[-which(subnodes %in% tips)] # remove tips
+    #print("subnodes")
+    #print(subnodes)
+    # if all subnodes are in the set of nodes with bootstrap > 99, delete the subnodes and add node
+    # to set of clusters
+    if (length(subnodes)==0) {
+      clusters <- c(clusters, node)
+    } else if (all(subnodes %in% wgs50_bootstrap99)) {
+      copy_wgs50_bootstrap99 <- copy_wgs50_bootstrap99[-which(copy_wgs50_bootstrap99 %in% subnodes)]
+      #print("copy_wgs50_bootstrap99")
+      #print(copy_wgs50_bootstrap99)
+      clusters <- c(clusters, node)
+    }
+    i <- i + 1
+    node <- copy_wgs50_bootstrap99[i]
+    #print(node)
+}
+
+wgs50clust_tips <- lapply(clusters, function(x) offspring(wgs50@phylo, x, tiponly=TRUE))
+wgs50clust_labels <- lapply(wgs50clust_tips, function(x) wgs50@phylo$tip.label[x] %>% sort)
+wgs50clust_index <- sapply(wgs50clust_labels, function(x) which(sapply(labels, identical, x)))
+```
+
+```{r wgs50_withclust}
+clustdf <- data.frame(label=alignmentnames)
+clustdf$cluster <- alignmentnames %in% flatten(wgs50clust_labels)
+names(wgs50clust_labels) <- 1:length(wgs50clust_labels)
+# from here: https://stackoverflow.com/questions/9950144/access-lapply-index-names-inside-fun
+wgs50clustdf <- data.frame(label = flatten(wgs50clust_labels) %>% unlist(), index=lapply(seq_along(wgs50clust_labels), function(y,n,i) { rep(n[[i]],length(y[[i]])) }, y=wgs50clust_labels, n=names(wgs50clust_labels)) %>% flatten() %>% unlist())
+clustdf <- left_join(clustdf, wgs50clustdf)
+clustdf$index <- as.numeric(clustdf$index)
+clustdf <- left_join(clustdf, seqtypedf, by=c("label"="labels"))
+ggplot(clustdf) + geom_bar(aes(x=index, fill=type), position="fill")
+numerictype <- gsub("pol", 0, clustdf$type)
+numerictype <- gsub("wgs", 1, numerictype)
+
+# from here: https://stackoverflow.com/questions/24713350/ordering-bars-in-geom-bar-position-fill
+clustdf$reorder <- reorder(clustdf$index, numerictype, FUN=function(x) mean(as.numeric(x)))
+ggplot(filter(clustdf, !is.na(index)),aes(x=reorder,fill = type)) + xlab("Cluster") + ylab("Composition") + geom_bar() #geom_bar(position="fill")
+```
+
 ## Suggestions that have been given
 
  * How many nodes share strong support between pol & whole genome vs between pol & not-whole genome?
