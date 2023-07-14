@@ -19,17 +19,24 @@ library(plotly)
 library(reshape)
 #library(listenv)
 plan(multisession, workers=8)
-PATH="/gpfs/data/cbc/aguang/hiv_wide"
-setwd(PATH)
-#PATH="~/CORE/kantorlab/hiv_wide/"
-all_tree_bootstraps <-
-  readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
-adists <- readRDS(file=file.path(PATH,"alignment_dists.rds"))
+#PATH="/gpfs/data/cbc/aguang/hiv_wide"
+PATH="~/CORE/kantorlab/hiv_wide/"
+knitr::opts_knit$set(root.dir = PATH)
+#setwd(PATH)
+# damn... forgot to pull it from Oscar
+#all_tree_bootstraps <-
+#  readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
+
+# temporarily cutting these out because didn't download from Oscar
+#adists <- readRDS(file=file.path(PATH,"alignment_dists.rds"))
 
 ALIGNMENT_PATH = file.path(PATH,"results/alignments")
 alignmentfiles <- list.files(ALIGNMENT_PATH, ".fa$", full.names=TRUE)
 alignments <- lapply(alignmentfiles, read.FASTA)
 names(alignments) <- treenames
+
+RPATH=file.path(PATH,"R")
+source(file.path(RPATH,"cluster.R"))
 ```
 
 ```{r loadtree, include=FALSE}
@@ -86,7 +93,8 @@ all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
 saveRDS(all_tree_bootstraps, file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
 ```
 
-```{r, make_data_frame}
+```{r, make_data_frame, eval=FALSE}
+# temporarily making eval=FALSE because didn't download data from Oscar
 # it looks like each element in each list in all_tree_bootstraps is the same partition which is nice. So we want to save the name of the partition, and the number if it's the second value, or NA if it doesn't exist/the value is NULL
 
 # labels is the actual list of labels
@@ -120,7 +128,7 @@ As a quick sanity check, we compute the RF distance between all of our phylogene
 just_trees <- phylos[c(11,1,2,3,4,5,6,7,8,9,10)]
 class(just_trees) <- "multiPhylo"
 tree_rfdist <- dist.topo(just_trees)
-ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) + coord_fixed() + scale_fill_viridis_c()
+ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) + geom_text(aes(label=value)) + coord_fixed() + scale_fill_viridis_c()
 ```
 
 # How many clusters from pol have high support in the wgs tree?
@@ -362,43 +370,38 @@ ggplot(dist_df_99, aes(x=dist)) + geom_freqpoly(aes(color=cat)) + facet_wrap(var
 
 ## What about wgs clusters?
 
-todo: cluster all of them by bootstrap value and then do an upset plot comparing them
+Interesting results... Tried at 90, 95, 99, common bootstrap (can plot all on same plot I think, different colors). Dip continues from pol to wgs50 with improvement starting at wgs60 in 99, same in 90, and also in 95. Kinda crazy!
 
 ```{r wgs_clusters}
-# spotchecking the results of this it does look ok but should still write a test tree and be careful...
+threshold <- c(90,95,99)
+allclusters <- lapply(threshold, function(y) future_lapply(trees, function(x) cluster(x, y, labels)))
+names(allclusters) <- threshold
 
-poltree <- trees[[10]]
-pol_bootstrap99 <- filter(poltree@data, UFboot > 99)$node
-copy_pol_bootstrap99 <- pol_bootstrap99
-# to cluster, for a given node with UFboot > 99, are its children also UFboot > 99?
-# we can start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
-i <- 1
-node <- pol_bootstrap99[i]
-tips <- 1:3860
-clusters <- c()
-while(!is.na(node)) {
-    subnodes <- offspring(poltree@phylo, node)
-    subnodes <- subnodes[-which(subnodes %in% tips)] # remove tips
-    #print("subnodes")
-    #print(subnodes)
-    # if all subnodes are in the set of nodes with bootstrap > 99, delete the subnodes and add node
-    # to set of clusters
-    if (length(subnodes)==0) {
-      clusters <- c(clusters, node)
-    } else if (all(subnodes %in% pol_bootstrap99)) {
-      copy_pol_bootstrap99 <- copy_pol_bootstrap99[-which(copy_pol_bootstrap99 %in% subnodes)]
-      #print("copy_pol_bootstrap99")
-      #print(copy_pol_bootstrap99)
-      clusters <- c(clusters, node)
-    }
-    i <- i + 1
-    node <- copy_pol_bootstrap99[i]
-    #print(node)
-}
+# number of common clusters = tp
+sharedclust <- lapply(allclusters, function(y) sapply(y, function(x) intersect(x[[3]],y$wgs[[3]]) %>% length))
+tp <- data.frame(sharedclust)
+names(tp) <- c("90","95","99")
+tp$tree <- rownames(tp)
+tp <- pivot_longer(tp, cols=c("90","95","99"), names_to="bootstrap", values_to="tp")
+# number of total clusters
+totalclust <- lapply(allclusters, function(y) sapply(y, function(x) length(x[[3]])))
 
-polclust_tips <- lapply(clusters, function(x) offspring(poltree@phylo, x, tiponly=TRUE))
-polclust_labels <- lapply(polclust_tips, function(x) poltree@phylo$tip.label[x] %>% sort)
-polclust_index <- sapply(polclust_labels, function(x) which(sapply(labels, identical, x)))
+# number of total - common = clusters specific to given tree = fp
+fp <- data.frame(totalclust)
+names(fp) <- c("90","95","99")
+fp$tree <- rownames(fp)
+
+# number of wgs - common = clusters specific to wgs = fn
+# https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group
+
+# number of possible clusters is number of nodes in tree which here we know is 1194
+# 1194 - fn = tn
+cluster_compare <- pivot_longer(fp, cols=c("90","95","99"), names_to="bootstrap",values_to="totalclust") %>% left_join(tp) %>%
+    mutate(fp=totalclust-tp) %>%
+    group_by(bootstrap) %>%
+    mutate(fn=totalclust[tree=="wgs"]-tp, tn=1194-fn, precision=tp/(tp+fp),recall=tp/(tp+fn))
+
+ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
 ```
 
 # How many nodes share strong support between pol & whole genome vs between pol & not wgs?
@@ -562,7 +565,7 @@ numerictype <- gsub("wgs", 1, numerictype)
 
 # from here: https://stackoverflow.com/questions/24713350/ordering-bars-in-geom-bar-position-fill
 clustdf$reorder <- reorder(clustdf$index, numerictype, FUN=function(x) mean(as.numeric(x)))
-ggplot(filter(clustdf, !is.na(index)),aes(x=reorder,fill = type)) + xlab("Cluster") + ylab("Composition") + geom_bar() #geom_bar(position="fill")
+ggplot(filter(clustdf, !is.na(index)),aes(x=reorder,fill = type)) + xlab("Cluster") + ylab("Composition") + geom_bar() # geom_bar(position="fill")#geom_bar() + 
 ```
 
 ## Suggestions that have been given
