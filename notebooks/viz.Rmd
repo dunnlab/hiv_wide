@@ -19,13 +19,13 @@ library(plotly)
 library(reshape)
 #library(listenv)
 plan(multisession, workers=8)
-#PATH="/gpfs/data/cbc/aguang/hiv_wide"
-PATH="~/CORE/kantorlab/hiv_wide/"
+PATH="/gpfs/data/cbc/aguang/hiv_wide"
+#PATH="~/CORE/kantorlab/hiv_wide/"
 knitr::opts_knit$set(root.dir = PATH)
 #setwd(PATH)
 # damn... forgot to pull it from Oscar
-#all_tree_bootstraps <-
-#  readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
+all_tree_bootstraps <-
+  readRDS(file=file.path(PATH,"all_tree_bootstraps_subtypeB.rds"))
 
 # temporarily cutting these out because didn't download from Oscar
 #adists <- readRDS(file=file.path(PATH,"alignment_dists.rds"))
@@ -33,6 +33,7 @@ knitr::opts_knit$set(root.dir = PATH)
 ALIGNMENT_PATH = file.path(PATH,"results/alignments")
 alignmentfiles <- list.files(ALIGNMENT_PATH, ".fa$", full.names=TRUE)
 alignments <- lapply(alignmentfiles, read.FASTA)
+treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 names(alignments) <- treenames
 
 RPATH=file.path(PATH,"R")
@@ -46,7 +47,6 @@ names(trees) <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30",
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
 labels %<-% lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]] %>% sort)
-treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 ```
 
 ```{r clusterpicker_load, include=FALSE}
@@ -66,8 +66,12 @@ There are 11 trees that were built with iqtree from the T-shaped alignments. The
 # Findings
 
  * In terms of congruence between `pol` and the mixtures with clusters identified with pol, there is a dip to `wgs60`, and then congruence increases again. (Figures \@ref(fig:lineplot-clusterpicker) and \@ref(fig:heatmap-clusterpicker-bootstrap))
+ 
+# Updates
 
-## Making dataframe of bootstrap values
+## 7/14/23 - try 70, 80, 85 bootstrap as well
+
+# Making dataframe of bootstrap values
 
 We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn't exist in tree for percent of full genome, otherwise bootstrap value)
 
@@ -190,14 +194,15 @@ wgsclades$polclust_99_045 <- wgsclades$labelind %in% clusters_99_045_index
 
 num_pol_in_wgs <- sum(polclust_index %in% wgsclades$labelind)
 num_pol99_045_in_wgs <- sum(clusters_99_045_index %in% wgsclades$labelind)
+#num_pol70_in_wgs <- sum(allclusters[[1]][[10]][[3]] %in% wgsclades$labelind)
 
 cc <- scales::seq_gradient_pal("white", "blue", "Lab")(seq(0,1,length.out=10))
 ggplot(wgsclades,
        aes(x=wgs,y=bootstrap,color=tree), alpha=0.3) +
-    geom_jitter(data=filter(wgsclades,labelind %in% polclust_index),
+    geom_jitter(data=filter(wgsclades,labelind %in% allclusters[[1]][[10]][[3]]),
              aes(x=wgs,y=bootstrap),color="black",size=4.5,alpha=0.5) +
-    geom_jitter(data=filter(wgsclades,labelind %in% clusters_99_045_index),
-                aes(x=wgs,y=bootstrap),color="red",size=4.5,alpha=0.5) + 
+    #geom_jitter(data=filter(wgsclades,labelind %in% clusters_99_045_index),
+    #            aes(x=wgs,y=bootstrap),color="red",size=4.5,alpha=0.5) + 
     geom_jitter() +
   scale_color_manual(values=cc, labels=c("pol", "wgs10-pol90", "wgs20-pol80",
                                          "wgs30-pol70","wgs40-pol60","wgs50-pol50",
@@ -372,23 +377,23 @@ ggplot(dist_df_99, aes(x=dist)) + geom_freqpoly(aes(color=cat)) + facet_wrap(var
 
 Interesting results... Tried at 90, 95, 99, common bootstrap (can plot all on same plot I think, different colors). Dip continues from pol to wgs50 with improvement starting at wgs60 in 99, same in 90, and also in 95. Kinda crazy!
 
-```{r wgs_clusters}
-threshold <- c(90,95,99)
+```{r wgs_clusters, cache=TRUE}
+threshold <- c(70, 80, 85,90,95,99)
 allclusters <- lapply(threshold, function(y) future_lapply(trees, function(x) cluster(x, y, labels)))
 names(allclusters) <- threshold
 
 # number of common clusters = tp
 sharedclust <- lapply(allclusters, function(y) sapply(y, function(x) intersect(x[[3]],y$wgs[[3]]) %>% length))
 tp <- data.frame(sharedclust)
-names(tp) <- c("90","95","99")
+names(tp) <- c("70","80","85","90","95","99")
 tp$tree <- rownames(tp)
-tp <- pivot_longer(tp, cols=c("90","95","99"), names_to="bootstrap", values_to="tp")
+tp <- pivot_longer(tp, cols=c("70","80","85","90","95","99"), names_to="bootstrap", values_to="tp")
 # number of total clusters
 totalclust <- lapply(allclusters, function(y) sapply(y, function(x) length(x[[3]])))
 
 # number of total - common = clusters specific to given tree = fp
 fp <- data.frame(totalclust)
-names(fp) <- c("90","95","99")
+names(fp) <- c("70","80","85","90","95","99")
 fp$tree <- rownames(fp)
 
 # number of wgs - common = clusters specific to wgs = fn
@@ -396,12 +401,44 @@ fp$tree <- rownames(fp)
 
 # number of possible clusters is number of nodes in tree which here we know is 1194
 # 1194 - fn = tn
-cluster_compare <- pivot_longer(fp, cols=c("90","95","99"), names_to="bootstrap",values_to="totalclust") %>% left_join(tp) %>%
+cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names_to="bootstrap",values_to="totalclust") %>% left_join(tp) %>%
     mutate(fp=totalclust-tp) %>%
     group_by(bootstrap) %>%
     mutate(fn=totalclust[tree=="wgs"]-tp, tn=1194-fn, precision=tp/(tp+fp),recall=tp/(tp+fn))
 
 ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
+```
+
+# For the nodes that aren't shared... what is the difference?
+
+Hmm... I think what we probably want to do is get the cluster names, and remove the overlaps first. Then, we can check how many are +/- 1 tip, +/- 2 tips, etc. The number of tips difference should be exact so the total should equal the sum of non-overlapping clusters in tree1 and tree2.
+
+I believe that labels are organized in alphabetical order, THUS we should be able to just concatenate them in order to do comparisons or create a data frame.
+
+Basically, for each cluster in tree1, does it exist in tree2 as a subset?
+
+```{r, tree_overlap}
+# for 70
+sapply(allclusters$`70`$wgs10[[2]], function(x) any(allclusters$`70`$pol[[2]][[1]] %in% x))
+```
+
+## Size of clusters by tree
+
+Maybe we take a look at size of clusters by tree first, as this is seeming to be interesting based on the code above.
+
+```{r, clust_size}
+clust_size <- plyr::ldply(allclusters, function(x) plyr::ldply(x, function(y) sapply(y[[2]], length) %>% table %>% data.frame, .id="tree"), .id="bootstrap")
+# ggplot(clust_size, aes(x=., y=Freq)) + geom_point() + facet_wrap(~bootstrap + tree)
+# preliminary plot, need some better way to visualize
+```
+
+## How many clusters in each are subsets of another?
+
+```{r, clust_subset}
+purrr::map2(treenames, treenames, function(x, y) {
+  sapply(allclusters$`70`$x[[2]], function(z) all(allclusters$`70`$y[[2]][[1]] %in% z))
+})
+sapply(allclusters$`70`$wgs10[[2]], function(x) all(allclusters$`70`$pol[[2]][[1]] %in% x))
 ```
 
 # How many nodes share strong support between pol & whole genome vs between pol & not wgs?
