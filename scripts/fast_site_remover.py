@@ -121,7 +121,7 @@ def main():
 
     # print out positions of sorted rates
     with open(f'fastest_sites.txt', 'w') as res:
-        res.write(sorted_rates)
+        res.write(str(sorted_rates))
 
     out_dict = {'fasta'         : 'fas',
                 'phylip'        : 'phy',
