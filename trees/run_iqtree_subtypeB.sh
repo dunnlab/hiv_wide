@@ -1,13 +1,17 @@
 #!/bin/bash
-rm -f jobs.txt
-ALIGNMENT_PATH=../results/alignments
-cd $ALIGNMENT_PATH
-for fa in *.fa;
-do
-    echo "iqtree -nt 8 -mem 16G -o 'K.CD.97.97ZR_EQTB11.AJ249235' -s $fa -m GTR+F+I+G4 -alrt 1000 -bb 1000 -wbt -wbtl" >> jobs.txt
-done
+#SBATCH -t 4-0 --mem=16G -c8
+#SBATCH --array=0-9
+#SBATCH -J iqtree
+#SBATCH -e /gpfs/data/cbc/aguang/hiv_wide/logs/%J-%A-%a.err
+#SBATCH -o /gpfs/data/cbc/aguang/hiv_wide/logs/%J-%A-%a.out
 
-module load dSQ
-dsq --job-file jobs.txt -C avx512 -t 4-0 -p pi_dunn,general -c8 --mem=16G --batch-file iqtree_hiv_wide.sh --output /dev/null --suppress-stats-file
-sed -i '/^# DO NOT/i module load IQ-TREE\/1.6.12-GCCcore-10.2.0-avx512' iqtree_hiv_wide.sh
-sbatch iqtree_hiv_wide.sh
+export SINGULARITY_BINDPATH="/gpfs/data/cbc/aguang/hiv_wide"
+
+WORKDIR=/gpfs/data/cbc/aguang/hiv_wide
+SINGULARITY_IMG=${WORKDIR}/metadata/rkantor_hiv.simg
+ALIGNMENTS=${WORKDIR}/results/alignments
+
+masks=( 010 020 030 040 050 060 070 080 090 100 )
+fa=HIV1_FLT_2018_genome_DNA_subtypeB_mask${masks[$SLURM_ARRAY_TASK_ID]}.fa
+
+singularity exec ${SINGULARITY_IMG} iqtree -nt 8 -mem 16G  -s ${ALIGNMENTS}/${fa} -m GTR+F+I+G4 -alrt 1000 -bb 1000 -wbt -wbtl

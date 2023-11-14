@@ -1,23 +1,21 @@
 #!/bin/bash
-#SBATCH -J clusterpicker
-#SBATCH --time=10:00:00
-#SBATCH --mem=8G
+#SBATCH -t 4-0 --mem=16G -c8
 #SBATCH --array=0-10
-#SBATCH -e /gpfs/data/cbc/aguang/hiv_wide/logs/cluster-picker-%A-%a-%J.err
-#SBATCH -o /gpfs/data/cbc/aguang/hiv_wide/logs/cluster-picker-%A-%a-%J.out
+#SBATCH -J clusterpicker
+#SBATCH -e /gpfs/data/cbc/aguang/hiv_wide/logs/%J.err
+#SBATCH -o /gpfs/data/cbc/aguang/hiv_wide/logs/%J.out
 
-export SINGULARITY_BINDPATH="/gpfs/home/$USER,/gpfs/scratch/$USER,/gpfs/data/cbc"
-module load java
+export SINGULARITY_BINDPATH="/gpfs/data/cbc/aguang/hiv_wide"
 
-BASE_DIR=/gpfs/data/cbc/aguang/hiv_wide
-SINGULARITY_IMG=${BASE_DIR}/metadata/rkantor_hiv.simg
-TREE_DIR=${BASE_DIR}/trees
+WORKDIR=/gpfs/data/cbc/aguang/hiv_wide
+SINGULARITY_IMG=${WORKDIR}/metadadta/rkantor_hiv.simg
+ALIGNMENTS=${WORKDIR}/results/alignments
+TREES=${WORKDIR}/results/trees
 
-newgrp cbcollab
+masks=( 000 010 020 030 040 050 060 070 080 090 100 )
+fa=HIV1_FLT_2018_genome_DNA_subtypeB_mask${masks[$SLURM_ARRAY_TASK_ID]}.fa
+tree=HIV1_FLT_2018_genome_DNA_subtypeB_mask${masks[$SLURM_ARRAY_TASK_ID]}.treefile
 
-masks=( "" _mask010 _mask020 _mask030 _mask040 _mask050 _mask060 _mask070 _mask080 _mask090 _mask100 )
+java –jar /home/rstudio/ClusterPicker_1.2.jar $fa $tree 90 99 0.015 10
 
-alignment=HIV1_FLT_2018_genome_DNA${masks[$SLURM_ARRAY_TASK_ID]}.fa
-tree=${alignment}.treefile
 
-singularity exec $SINGULARITY_IMG java -jar ClusterPicker_command.jar $alignment $tree 0.9 0.99 0.015 10

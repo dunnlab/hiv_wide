@@ -138,3 +138,4 @@ HIV1_FLT_2018_genome_DNA.fasta
 *.ufboot
 *.splits.nex
 *.mldist
+.Rproj.user
