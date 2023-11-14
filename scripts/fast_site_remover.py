@@ -119,6 +119,10 @@ def main():
     os.mkdir(f'{args.output}/steps_{args.step_size}')
     os.chdir(f'{args.output}/steps_{args.step_size}')
 
+    # print out positions of sorted rates
+    with open(f'fastest_sites.txt', 'w') as res:
+        res.write(sorted_rates)
+
     out_dict = {'fasta'         : 'fas',
                 'phylip'        : 'phy',
                 'phylip-relaxed': 'phy',
