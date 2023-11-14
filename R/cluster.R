@@ -6,7 +6,7 @@
 cluster <- function(t, b, labels) {
     bootstraps <- filter(t@data, UFboot >= b)$node
     copy_bootstraps <- bootstraps
-    
+
     # to cluster, for a given node with UFboot > b, are its children also UFboot > b?
     # we start at the beginning of the vector since those are the largest subtrees / closest to the root and delete the children from the list until we hit a leaf / there are no more children
     i <- 1
@@ -30,10 +30,10 @@ cluster <- function(t, b, labels) {
         i <- i + 1
         node <- copy_bootstraps[i]
     }
-    
-    cluster_tips <- lapply(clusters, function(x) offspring(t@phylo, x, tiponly=TRUE))
+
+    cluster_tips <- lapply(clusters, function(x) offspring(t@phylo, x, type="tips"))
     cluster_labels <- lapply(cluster_tips, function(x) t@phylo$tip.label[x] %>% sort)
     cluster_index <- sapply(cluster_labels, function(x) which(sapply(labels, identical, x)))
-    
+
     return(list(cluster_tips, cluster_labels, cluster_index))
 }
