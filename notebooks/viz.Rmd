@@ -20,7 +20,7 @@ library(reshape)
 #library(listenv)
 plan(multisession, workers=8)
 #PATH="/gpfs/data/cbc/aguang/hiv_wide"
-PATH="~/CORE/kantorlab/hiv_wide/"
+PATH="~/CORE/kantorlab/hiv_wide"
 RDATA=file.path(PATH,"data/Rdata")
 knitr::opts_knit$set(root.dir = PATH)
 #setwd(PATH)
@@ -604,6 +604,18 @@ numerictype <- gsub("wgs", 1, numerictype)
 # from here: https://stackoverflow.com/questions/24713350/ordering-bars-in-geom-bar-position-fill
 clustdf$reorder <- reorder(clustdf$index, numerictype, FUN=function(x) mean(as.numeric(x)))
 ggplot(filter(clustdf, !is.na(index)),aes(x=reorder,fill = type)) + xlab("Cluster") + ylab("Composition") + geom_bar() # geom_bar(position="fill")#geom_bar() + 
+```
+
+## Fastest sites
+
+We ran `fast_sites_remover.py` from PhyloFisher and got the fastest evolving sites by indices. They are in `r file.path(PATH, "scripts/fast_site_remover_out_Nov.14.2023/steps_500")`.
+
+```{r fastest_sites}
+sites_path <- file.path(PATH, "scripts/fast_site_remover_out_Nov.14.2023/steps_500/fastest_sites.txt")
+fastest_sites <- read_file(sites_path) %>%
+    strsplit(x=.,split=", ") %>%
+    .[[1]]
+fastest_sites[1] <- substring(fastest_sites[1],2)
 ```
 
 ## Suggestions that have been given
