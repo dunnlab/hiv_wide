@@ -119,9 +119,9 @@ def main():
     os.mkdir(f'{args.output}/steps_{args.step_size}')
     os.chdir(f'{args.output}/steps_{args.step_size}')
 
-    # print out positions of sorted rates
-    with open(f'fastest_sites.txt', 'w') as res:
-        res.write(str(sorted_rates))
+    if args.pos == True:
+        with open(f'fastest_sites.txt', 'w') as res:
+            res.write(str(sorted_rates))
 
     out_dict = {'fasta'         : 'fas',
                 'phylip'        : 'phy',
@@ -190,6 +190,12 @@ if __name__ == "__main__":
                           help=textwrap.dedent("""\
                                                Whether file is amino or nuc (nucleic)
                                                Default: amino
+                                               """))
+    optional.add_argument('-p', '--pos', type=bool, default=False,
+                          help=textwrap.dedent("""\
+                                Prints out fastest site positions to a file fastest_sites.txt in order of fastest
+                                               to slowest site if True.
+                                Default: False
                                                """))
 
     args = help_formatter.get_args(parser, optional, required, pre_suf=False, inp_dir=False)

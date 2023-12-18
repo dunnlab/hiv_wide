@@ -616,6 +616,9 @@ fastest_sites <- read_file(sites_path) %>%
     strsplit(x=.,split=", ") %>%
     .[[1]]
 fastest_sites[1] <- substring(fastest_sites[1],2)
+end <- length(fastest_sites)
+fastest_sites[end] <- substring(fastest_sites[end],1,str_length(fastest_sites[end])-1)
+fastest_sites <- as.numeric(fastest_sites)
 ```
 
 ## Suggestions that have been given
