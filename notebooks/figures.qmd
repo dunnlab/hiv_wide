@@ -33,7 +33,6 @@ knitr::opts_knit$set(root.dir = PATH)
 all_tree_bootstraps <-
   readRDS(file=file.path(RDATA,"all_tree_bootstraps_subtypeB.rds"))
 
-# temporarily cutting these out because didn't download from Oscar
 adists <- readRDS(file=file.path(RDATA,"alignment_dists.rds"))
 
 treenames <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
@@ -47,12 +46,19 @@ source(file.path(RPATH,"cluster.R"))
 ```
 
 ```{r loadtree, include=FALSE}
+source(file.path(RPATH, "loadtree.R"))
+
 treefiles <- list.files(file.path(PATH,"results/trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
 names(trees) <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
 phylos <- lapply(trees, function(x) x@phylo)
 bipartitions <- prop.part(phylos)
 labels <- lapply(1:length(bipartitions), function(x) attributes(bipartitions)$labels[bipartitions[x][[1]]] %>% sort)
+
+maskgp120_names <- c("maskgp120_wgs90", "maskgp120_wgs80", "maskgp120_wgs70", "maskgp120_wgs60", "maskgp120_wgs50", "maskgp120_wgs40", "maskgp120_wgs30", "maskgp120_wgs20", "maskgp120_wgs10", "maskgp120_pol", "maskgp120_wgs", "wgs")
+maskgp120 <- loadtree(file.path(PATH,"results/trees/maskgp120"), maskgp120_names)
+maskgp120_phylos <- maskgp120[[1]]
+maskgp120_labels <- maskgp120[[2]]
 ```
 
 ```{r clusterpicker_load, include=FALSE}
@@ -139,15 +145,15 @@ ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) +
 
 ## How do bootstrap values compare for clades shared between mixture trees and wgs?
 
-```{r numclades, fig.cap="Proportion of clades in each quadrant for each mixture tree, where the quadrants are: both mixture tree and whole genome tree have bootstrap value < 95, mixture tree has bootstrap value >= 95 and whole genome < 95, mixture tree has bootstrap value < 95 and whole genome >=95, both trees have bootstrap value >=95."}
-wgs_shared_clades <- filter(bootstrap_df, !is.na(wgs)) %>%
+```{r propclades, fig.cap="Proportion of clades in each quadrant for each mixture tree, where the quadrants are: both mixture tree and whole genome tree have bootstrap value < 95, mixture tree has bootstrap value >= 95 and whole genome < 95, mixture tree has bootstrap value < 95 and whole genome >=95, both trees have bootstrap value >=95."}
+wgs_clades <- filter(bootstrap_df, !is.na(wgs)) %>%
   pivot_longer(cols=wgs90:pol, names_to="tree",values_to="bootstrap") %>%
     filter(!is.na(bootstrap))
 wgs_shared_clades_df <- mutate(wgs_shared_clades, bootbins=case_when(
-    bootstrap < 95 & wgs < 95 ~ "both <95",
-    bootstrap < 95 & wgs >= 95 ~ "mix <95, wgs >=95",
-    bootstrap >= 95 & wgs < 95 ~ "mix >=95, wgs <95",
-    bootstrap >= 95 & wgs >= 95 ~ "both >=95"
+    bootstrap < 90 & wgs < 90 ~ "both <95",
+    bootstrap < 90 & wgs >= 90 ~ "mix <95, wgs >=95",
+    bootstrap >= 90 & wgs < 90 ~ "mix >=95, wgs <95",
+    bootstrap >= 90 & wgs >= 90 ~ "both >=95"
 )) %>%
     count(bootbins, tree) %>%
     group_by(tree) %>% mutate(prop=n/sum(n)) %>%
@@ -163,7 +169,14 @@ wgs_shared_clades_num <- wgs_shared_clades_df %>%
     pivot_wider(names_from=bootbins, values_from=n) %>%
     select(tree, `both <95`, `mix >=95, wgs <95`, `mix <95, wgs >=95`, `both >=95`)
 
-kbl(wgs_shared_clades_df, col.names=NULL, digits=c(0,2,2,2,2)) %>% kable_paper() %>%
+kbl(wgs_shared_clades_prop, col.names=NULL, digits=c(0,2,2,2,2)) %>% kable_paper() %>%
+    add_header_above(c("tree", "tree<95", "tree>= 95","tree<95","tree>=95")) %>%
+    add_header_above(c(" ", "wgs<95"=2,"wgs>=95"=2)) %>%
+    add_header_above(c("Proportion of clades in set with bootstrap value"=5))
+```
+
+```{r numclades, fig.cap="The same table as above but with absolute numbers instead of proportions."}
+kbl(wgs_shared_clades_num, col.names=NULL, digits=c(0,2,2,2,2)) %>% kable_paper() %>%
     add_header_above(c("tree", "tree<95", "tree>= 95","tree<95","tree>=95")) %>%
     add_header_above(c(" ", "wgs<95"=2,"wgs>=95"=2)) %>%
     add_header_above(c("Proportion of clades in set with bootstrap value"=5))
@@ -202,6 +215,46 @@ cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names
 
 ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
 ```
+
+```{r size_distro_clusters}
+sizeclust <- lapply(allclusters, function(x) lapply(x, function(y) sapply(y[[1]], length)))
+```
+
+```{r maskgp120_clusters, cache=TRUE, eval=FALSE}
+threshold <- c(70, 80, 85,90,95,99)
+maskgp120_allclusters <- lapply(threshold, function(y) future_lapply(maskgp120_phylos, function(x) cluster(x, y, maskgp120_labels)))
+names(allclusters) <- threshold
+
+# number of common clusters = tp
+sharedclust <- lapply(maskgp120_allclusters, function(y) sapply(y, function(x) intersect(x[[3]],y$wgs[[3]]) %>% length))
+tp <- data.frame(sharedclust)
+names(tp) <- c("70","80","85","90","95","99")
+tp$tree <- rownames(tp)
+tp <- pivot_longer(tp, cols=c("70","80","85","90","95","99"), names_to="bootstrap", values_to="tp")
+# number of total clusters
+totalclust <- lapply(maskgp120_allclusters, function(y) sapply(y, function(x) length(x[[3]])))
+
+# number of total - common = clusters specific to given tree = fp
+fp <- data.frame(totalclust)
+names(fp) <- c("70","80","85","90","95","99")
+fp$tree <- rownames(fp)
+
+# number of wgs - common = clusters specific to wgs = fn
+# https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group
+
+# number of possible clusters is number of nodes in tree which here we know is 1194
+# 1194 - fn = tn
+cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names_to="bootstrap",values_to="totalclust") %>% left_join(tp) %>%
+    mutate(fp=totalclust-tp) %>%
+    group_by(bootstrap) %>%
+    mutate(fn=totalclust[tree=="wgs"]-tp, tn=1194-fn, precision=tp/(tp+fp),recall=tp/(tp+fn))
+
+ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
+```
+
+
+
+===
 
 # How many clusters from pol have high support in the wgs tree?
 
@@ -364,6 +417,20 @@ One idea we had was to plot the genetic distance of the pol clades. We compute t
  * Bootstrap >= 95% in tree
  * Bootstrap < 95% in tree
  * Non existent in tree
+ 
+```{r gendist-allclusters-wgs}
+sharedclust <- lapply(allclusters, function(y) sapply(y, function(x) intersect(x[[3]],y$wgs[[3]])))
+sharedclust_labels <- lapply(sharedclust, function(y) sapply(y, function(z) labels[z]))
+# looking at 90 bootstrap
+sharedclust_dists <- lapply(1:11, function(x) {
+  clusts <- sharedclust_labels[[4]]
+  clusts <- clusts[[x]]
+  max_gendist(clusts, adists[[x]])
+})
+names(sharedclust_dists) <- treenames
+sharedclust_df <- data.frame(name=rep(names(sharedclust_dists), sapply(sharedclust_dists, length)),dist=do.call('c', sharedclust_dists))
+ggplot(sharedclust_df, aes(x=dist)) + geom_freqpoly(aes(color=name))
+```
 
 ```{r gendist-clusterpicker-wgs}
 bootstrap_ge95_wgs <- labels[filter(bootstrap_df_clusterpickeronly, tree=="wgs" & bootstrap>=95)$labelind]
