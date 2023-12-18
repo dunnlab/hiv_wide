@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import sys
-from os import path
+from os import path, mkdir
 import random
 
 from Bio import SeqIO
 from Bio.Seq import Seq
 
 random.seed(42)
-
+seeds = random.sample(range(0,100000000), 100)
 
 def get_HXB2_pol_coords(orig_matrix):
     """
@@ -57,28 +57,35 @@ def generate_sequences(seqs_dict, id_list, n_to_mask, mask_char, start, stop):
         else:
             yield seqs_dict[seq_id]
 
+def mask_write(seed, orig_matrix, out_prefix):
+    mask_character = "-"
+    pol_start, pol_stop = get_HXB2_pol_coords(orig_matrix)
+
+    shuff_ids_list = [x for x in orig_matrix]
+    random.Random(seed).shuffle(shuff_ids_list)
+    for pct_to_mask in range(1, 11):
+        n_to_mask = round(len(shuff_ids_list) * pct_to_mask / 10)
+        with open(f"{out_prefix}_mask{pct_to_mask*10:0>3}.fa", "w") as masked_matrix:
+            SeqIO.write(
+                generate_sequences(
+                    orig_matrix,
+                    shuff_ids_list,
+                    n_to_mask,
+                    mask_character,
+                    pol_start,
+                    pol_stop,
+                ),
+                masked_matrix,
+                "fasta-2line",
+            )
+
 matrix_in = path.abspath(sys.argv[1])
 out_dir = path.abspath(sys.argv[2])
 out_prefix = path.join(out_dir, path.splitext(path.basename(matrix_in))[0])
-mask_character = "-"
-
 orig_matrix = SeqIO.index(matrix_in, "fasta")
-pol_start, pol_stop = get_HXB2_pol_coords(orig_matrix)
 
-shuff_ids_list = [x for x in orig_matrix]
-random.shuffle(shuff_ids_list)
-for pct_to_mask in range(1, 11):
-    n_to_mask = round(len(shuff_ids_list) * pct_to_mask / 10)
-    with open(f"{out_prefix}_mask{pct_to_mask*10:0>3}.fa", "w") as masked_matrix:
-        SeqIO.write(
-            generate_sequences(
-                orig_matrix,
-                shuff_ids_list,
-                n_to_mask,
-                mask_character,
-                pol_start,
-                pol_stop,
-            ),
-            masked_matrix,
-            "fasta-2line",
-        )
+for seed in seeds:
+    seed_dir = path.join(out_dir, seed))
+    mkdir(seed_dir)
+    out_prefix = path.join(seed_dir, path.splitext(path.basename(matrix_in))[0]+f"_{seed}")
+    mask_write(seed, orig_matrix, out_prefix)
