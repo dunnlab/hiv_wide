@@ -85,7 +85,8 @@ out_prefix = path.join(out_dir, path.splitext(path.basename(matrix_in))[0])
 orig_matrix = SeqIO.index(matrix_in, "fasta")
 
 for seed in seeds:
-    seed_dir = path.join(out_dir, seed))
-    mkdir(seed_dir)
-    out_prefix = path.join(seed_dir, path.splitext(path.basename(matrix_in))[0]+f"_{seed}")
+    seed_dir = path.join(out_dir, str(seed))
+    if not path.exists(seed_dir):
+        mkdir(seed_dir)
+    out_prefix = path.join(seed_dir, path.splitext(path.basename(matrix_in))[0]+ f"_{seed}")
     mask_write(seed, orig_matrix, out_prefix)
