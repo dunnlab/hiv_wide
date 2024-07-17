@@ -25,7 +25,7 @@ library(here)
 #library(listenv)
 plan(multisession, workers=8)
 #PATH="/gpfs/data/cbc/aguang/hiv_wide"
-PATH="~/CORE/kantorlab/hiv_wide/"
+PATH="~/CORE/kantorlab/hiv_wide"
 setwd(PATH)
 here::i_am("notebooks/figures.qmd")
 RDATA=file.path(PATH,"data/Rdata")
@@ -43,6 +43,7 @@ names(alignments) <- treenames
 
 RPATH=file.path(PATH,"R")
 source(file.path(RPATH,"cluster.R"))
+source(file.path(RPATH,"loadparams.R"))
 ```
 
 ```{r loadtree, include=FALSE}
@@ -59,6 +60,14 @@ maskgp120_names <- c("maskgp120_wgs90", "maskgp120_wgs80", "maskgp120_wgs70", "m
 maskgp120 <- loadtree(file.path(PATH,"results/trees/maskgp120"), maskgp120_names)
 maskgp120_phylos <- maskgp120[[1]]
 maskgp120_labels <- maskgp120[[2]]
+```
+
+```{r sampletrees, include=FALSE}
+folders <- list.files(file.path(PATH,"results/trees/samples"))
+sampletrees <- lapply(folders, function(x) {
+    loadtree(file.path(PATH,"results/trees/samples",x),treenames, trees$wgs)
+})
+sampletrees <- Filter(Negate(is.null), sampletrees)
 ```
 
 ```{r clusterpicker_load, include=FALSE}
@@ -143,13 +152,34 @@ tree_rfdist <- dist.topo(just_trees)
 ggplot(melt(as.matrix(tree_rfdist)), aes(X1, X2)) + geom_tile(aes(fill=value)) + geom_text(aes(label=value)) + coord_fixed() + scale_fill_viridis_c()
 ```
 
+```{r, rf_dist2, fig.cap="Sample to sample RF distances between all phylogenetic trees. Closer to yellow is farther away, and closer to green is closer.", warning=FALSE}
+dists <- lapply(sampletrees, function(x) {
+    just_trees <- lapply(x[[1]], function(y) y@phylo)[c(11,1,2,3,4,5,6,7,8,9,10)]
+    class(just_trees) <- "multiPhylo"
+    tree_rfdist <- dist.topo(just_trees)
+    melt(as.matrix(tree_rfdist), varnames = c("row", "col"))
+})
+df_dists <- bind_rows(dists, .id="id")
+ggplot(filter(df_dists, row=="wgs" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter()
+```
+
+```{r rf_stats}
+wgs50_dist <- filter(df_dists, row=="wgs" & col=="wgs50")$value
+pol_dist <- filter(df_dists, row=="wgs" & col=="pol")$value
+wgs40_dist <- filter(df_dists, row=="wgs" & col=="wgs40")$value
+wgs30_dist <- filter(df_dists, row=="wgs" & col=="wgs30")$value
+t.test(wgs50_dist)
+t.test(wgs50_dist, pol_dist, paired=TRUE, alternative="less")
+
+```
+
 ## How do bootstrap values compare for clades shared between mixture trees and wgs?
 
 ```{r propclades, fig.cap="Proportion of clades in each quadrant for each mixture tree, where the quadrants are: both mixture tree and whole genome tree have bootstrap value < 95, mixture tree has bootstrap value >= 95 and whole genome < 95, mixture tree has bootstrap value < 95 and whole genome >=95, both trees have bootstrap value >=95."}
 wgs_clades <- filter(bootstrap_df, !is.na(wgs)) %>%
   pivot_longer(cols=wgs90:pol, names_to="tree",values_to="bootstrap") %>%
     filter(!is.na(bootstrap))
-wgs_shared_clades_df <- mutate(wgs_shared_clades, bootbins=case_when(
+wgs_shared_clades_df <- mutate(wgs_clades, bootbins=case_when(
     bootstrap < 90 & wgs < 90 ~ "both <95",
     bootstrap < 90 & wgs >= 90 ~ "mix <95, wgs >=95",
     bootstrap >= 90 & wgs < 90 ~ "mix >=95, wgs <95",
@@ -180,6 +210,30 @@ kbl(wgs_shared_clades_num, col.names=NULL, digits=c(0,2,2,2,2)) %>% kable_paper(
     add_header_above(c("tree", "tree<95", "tree>= 95","tree<95","tree>=95")) %>%
     add_header_above(c(" ", "wgs<95"=2,"wgs>=95"=2)) %>%
     add_header_above(c("Proportion of clades in set with bootstrap value"=5))
+```
+
+## Parameters for trees
+
+```{r params}
+wgsparams <- paramsdf(file.path(PATH,"results/trees/HIV1_FLT_2018_genome_DNA_subtypeB.fa.iqtree"))
+folders <- list.files(file.path(PATH,"results/trees/samples"))
+sampleparams <- lapply(folders, function(x) {
+    loadparams(file.path(PATH,"results/trees/samples",x))
+})
+sampleparams <- Filter(Negate(is.null), sampleparams)
+
+paramdf <- lapply(sampleparams, function(x) bind_rows(x, .id="tree")) %>% bind_rows(., .id="id")
+wgsparams$id <- 1000
+wgsparams$tree <- "wgs"
+paramdf <- rbind(paramdf, wgsparams) %>%
+    mutate(tree=fct_relevel(tree,"pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs"))
+ggplot(filter(paramdf, Type=="Rate parameter R"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+
+ggplot(filter(paramdf, Type=="State freq"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+
+ggplot(filter(paramdf, Type=="relative rate"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+
+ggplot(filter(paramdf, Type=="rr proportion"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
 ```
 
 ## How many clusters are identified in each mixture compared to whole genome?
@@ -252,7 +306,41 @@ cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names
 ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
 ```
 
+```{r samples}
+threshold <- c(70, 80, 85,90,95,99)
+samples_allclusters <- lapply(sampletrees, function(z) {
+    phylos <- z[[1]]
+    labels <- z[[2]]
+    allclusters <- lapply(threshold, function(y) future_lapply(phylos, function(x) cluster(x, y, labels)))
+    names(allclusters) <- threshold
+    })
 
+# number of common clusters = tp
+sharedclust <- lapply(maskgp120_allclusters, function(y) sapply(y, function(x) intersect(x[[3]],y$wgs[[3]]) %>% length))
+tp <- data.frame(sharedclust)
+names(tp) <- c("70","80","85","90","95","99")
+tp$tree <- rownames(tp)
+tp <- pivot_longer(tp, cols=c("70","80","85","90","95","99"), names_to="bootstrap", values_to="tp")
+# number of total clusters
+totalclust <- lapply(maskgp120_allclusters, function(y) sapply(y, function(x) length(x[[3]])))
+
+# number of total - common = clusters specific to given tree = fp
+fp <- data.frame(totalclust)
+names(fp) <- c("70","80","85","90","95","99")
+fp$tree <- rownames(fp)
+
+# number of wgs - common = clusters specific to wgs = fn
+# https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group
+
+# number of possible clusters is number of nodes in tree which here we know is 1194
+# 1194 - fn = tn
+cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names_to="bootstrap",values_to="totalclust") %>% left_join(tp) %>%
+    mutate(fp=totalclust-tp) %>%
+    group_by(bootstrap) %>%
+    mutate(fn=totalclust[tree=="wgs"]-tp, tn=1194-fn, precision=tp/(tp+fp),recall=tp/(tp+fn))
+
+ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
+```
 
 ===
 
