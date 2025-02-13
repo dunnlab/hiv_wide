@@ -1,9 +1,16 @@
 ---
 title: "Figures for manuscript"
 output:
-  bookdown::html_document2:
+    bookdown::html_document2:
     df_print: paged
     code_folding: hide
+
+#    pdf:
+#        documentclass: report
+#        keep-tex: true
+        
+
+
 execute:
     enabled: true
     cache: true
@@ -74,8 +81,8 @@ sampletrees <- future_lapply(folders, function(x) {
 sampletrees <- Filter(Negate(is.null), sampletrees)
 
 # fixedparamtrees
-fpfolders <- list.files(file.path(PATH,"results/trees/fixedparams"), full.names=TRUE)[1:20]
-fptrees <- lapply(fpfolders, function(x) {
+fpfolders <- list.files(file.path(PATH,"results/trees/fixedparams"), full.names=TRUE)[1:50]
+fptrees <- future_lapply(fpfolders, function(x) {
     loadtree(x, treenames, trees$wgs)
 })
 fptrees <- Filter(Negate(is.null), fptrees)
@@ -158,8 +165,23 @@ We keep the labels separate from the dataframe for now because the names are ext
 
 # Figure 1: How similar are the trees?
 
+```{r otherattempts, echo=FALSE, eval=FALSE}
+#library(phangorn)
+#initially we had tried geodesic distance but gave us this error
+#library(distory)
+#test <- sapply(samplephylos[1]$wgs90$tip.label %>% strsplit("\\."), function(x) x[3])
+#test <- test %>% as.numeric()
+#min(test[test > 20], na.rm=TRUE) #79
+#which(test==79) #105
+#samplephylos[1]$wgs90$tip.label[105] #"B.US.79.NYC4.KJ704792"
+#> dist.multiPhylo(samplephylos, outgroup="B.US.79.NYC4.KJ704792")
+#Error in dist.multiPhylo(x, method = method, force.multi2di = force.multi2di,  : 
+#  An error was encountered in parsing near position 32: Couldn't figure out what to do after a first leaf entry 
+# actually I have an email from Emmanuel Paradis about it but I never implemented the fix
+```
+
+
 ```{r fig1_rfdist, fig.cap="RF distances between all phylogenetic tree mixtures and the wgs tree. Closer to 0 on the y-axis is closer to the wgs tree, further is further away.", warning=FALSE}
-library(phangorn)
 dists <- lapply(sampletrees, function(x) {
     just_trees <- lapply(x[[1]], function(y) y@phylo)[c(11,1,2,3,4,5,6,7,8,9,10)]
     class(just_trees) <- "multiPhylo"
@@ -169,17 +191,18 @@ dists <- lapply(sampletrees, function(x) {
     melt(as.matrix(tree_rfdist), varnames = c("row", "col"))
 })
 df_dists <- bind_rows(dists, .id="id")
-ggplot(filter(df_dists, row=="wgs" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter(aes(alpha=0.5)) + xlab("Mixture") + ylab("Normalized Robinson-Foulds Distance") + theme_bw() + theme(legend.position="none")
-
+#tiff(filename=file.path(PATH,"figures/fig1.tif"),res=300,width=1600,height=1200)
+ggplot(filter(df_dists, row=="wgs100" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter(aes(alpha=0.5)) + xlab("Mixture") + ylab("Robinson-Foulds Distance") + theme_bw() + theme(legend.position="none")
+#dev.off()
 ```
 
 We compute the RF distance between all of our phylogenetic tree samples and create a boxplot for them (Figure \@ref{fig:fig1_rfdist}). It does appear that the pol tree is most similar to the pol10-wgs90 tree, and that the RF distance increases as the wgs proportion increases.
 
 ```{r rf_stats}
-wgs50_dist <- filter(df_dists, row=="wgs" & col=="wgs50")$value
-pol_dist <- filter(df_dists, row=="wgs" & col=="pol")$value
-wgs40_dist <- filter(df_dists, row=="wgs" & col=="wgs40")$value
-wgs30_dist <- filter(df_dists, row=="wgs" & col=="wgs30")$value
+wgs50_dist <- filter(df_dists, row=="wgs100" & col=="wgs50")$value
+pol_dist <- filter(df_dists, row=="wgs100" & col=="pol")$value
+wgs40_dist <- filter(df_dists, row=="wgs100" & col=="wgs40")$value
+wgs30_dist <- filter(df_dists, row=="wgs100" & col=="wgs30")$value
 t.test(wgs50_dist)
 t.test(wgs50_dist, pol_dist, paired=TRUE, alternative="less")
 ```
@@ -187,10 +210,11 @@ t.test(wgs50_dist, pol_dist, paired=TRUE, alternative="less")
 # Figure 2: PCoA of tree distances
 
 ```{r fig2_pcoa}
-#samplephylos <- lapply(sample.int(length(sampletrees), 20), function(x) lapply(sampletrees[[x]][[1]], as.phylo)) %>% flatten
+#samplephylos <- lapply(sample.int(length(sampletrees), 20), function(x) lapply(sampletrees[[x]][[1]], as.phylo)) %>% purrr::flatten()
 #distances <- ClusteringInfoDistance(samplephylos)
-#write_rds(file=file.path(PATH,"clustering_sample_distances.rds"),distances)
-distances <- read_rds(file=file.path(PATH, "clustering_sample_distances.rds"))
+#distances_normalized <- ClusteringInfoDistance(samplephylos, normalize=TRUE)
+#write_rds(file=file.path(RDATA,"clustering_sample_distances.rds"),distances)
+distances <- read_rds(file=file.path(RDATA, "clustering_sample_distances.rds"))
 
 test_dist <- as.matrix(distances)[-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209),-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209)]
 pcoa <- cmdscale(test_dist, eig=TRUE, k=12)
@@ -199,7 +223,10 @@ mapping <- pcoa$points[,1:2]
 mix <- rownames(mapping)
 mapping <- data.frame(mapping, Mixture=mix)
 
-ggplot(mapping) + geom_point(aes(x=X1, y=X2, color=Mixture)) + theme_bw() + labs(color="Mixture") + xlab("X1 (8.09% Percent Variance)") + ylab("X2 (2.59% Percent Variance)")
+tiff(filename=file.path(PATH,"figures/fig2.tif"),res=300,width=1600,height=1600)
+ggplot(mapping) + geom_point(aes(x=X1, y=X2, color=Mixture)) + theme_bw() + coord_fixed(xlim=c(-60,60),ylim=c(-60,60)) +
+    labs(color="Mixture") + xlab("X (8.09% Percent Variance)") + ylab("Y (2.59% Percent Variance)")
+dev.off()
 ```
 
 Figure \@ref{fig:fig2_pcoa}. To get the percent variance, we took the eigenvalues of the `pcoa` object and divided the first 2 by the total sum:
@@ -273,6 +300,7 @@ samples_clustsize <- bind_rows(samples_clustsize, .id="id")
 samples_clustsize$tree[samples_clustsize$tree=="wgs"] <- "wgs100"
 samples_clustsize$tree <- factor(samples_clustsize$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"))
 colnames(samples_clustsize) <- c("id", "bootstrap", "tree", "size")
+samples_clustsize$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,100)[match(samples_clustsize$tree, treenames)]
 ```
 
 For the number of clusters and size of clusters, we compute two dataframes, `samples_totalclust` and `samples_clustsize`. The `samples_totalclust` will be used later as well to help compute AMI, but for `sample_clustsize` we will compute the mean cluster size to summarize the cluster size distribution in a dataframe `samples_mean_clustsize`. In general all of them follow a Poisson distribution with mostly clusters of size 2, with larger clusters as more rare. (Supplementary Figure)
@@ -293,8 +321,27 @@ filter(samples_totalclust, id != 15) %>% group_by(bootstrap, tree) %>% summarise
 
 samples_clustchange <- left_join(samples_totalclust, samples_mean_clustsize)
 
-p1 <- ggplot(filter(samples_totalclust, id != 15), aes(x=numerical_tree,y=totalclust)) + geom_jitter(aes(color=bootstrap)) + geom_smooth(aes(group=bootstrap,color=bootstrap))
+library(patchwork)
+p1 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=totalclust)) + geom_jitter(aes(color=bootstrap)) + geom_smooth(aes(group=bootstrap,color=bootstrap)) +
+    theme_bw() +
+    xlab("wgs Percentage") +
+    ylab("Cluster Number") +
+    theme(legend.position="none") +
+    ggtitle("Cluster Number")
+p2 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=mean,color=bootstrap)) + geom_jitter() + geom_smooth() +
+    theme_bw() +
+    xlab("wgs Percentage") +
+    ylab("Mean Cluster Size") +
+    ggtitle("Mean Cluster Size") +
+    guides(color=guide_legend(title="Bootstrap"))
+#tiff(filename=file.path(PATH,"figures/fig3.tif"),res=300,width=1800,height=1400)
+p1 + p2 + plot_annotation(tag_levels = 'A')
+#dev.off()
 ```
+
+## Supplementary Table 1
+
+The supplementary table is not fully reproducible, in the sense that the only way I could get the formatting correct onto a word doc was by doing a preview and then saving that file rather than the `flextable::save_as_docx()` function, which would always have the table go off of the page. But the data itself is reproducible from this notebook and can be saved as a csv, and the kbl table is viewable from this document as well.
 
 ```{r clust_table}
 table_clustchange <- samples_clustchange %>% group_by(bootstrap, tree) %>%
@@ -302,36 +349,35 @@ table_clustchange <- samples_clustchange %>% group_by(bootstrap, tree) %>%
     pivot_longer(names_to="stat", cols=c("Mean Number of Clusters","Mean Cluster Size")) %>%
     pivot_wider(names_from=tree, values_from=value)
 
-kbl(table_clustchange, digits=3) %>% collapse_rows(column=1) %>% kable_paper("striped")
+library(flextable)
+ft1 <- samples_clustchange %>%
+    filter(id != 15) %>%
+    group_by(bootstrap, tree) %>%
+    summarise("Number"=mean(totalclust), "Size"=mean(mean)) %>%
+    pivot_longer(names_to="stat", cols=c("Number","Size")) %>%
+    pivot_wider(names_from=c(bootstrap,stat), values_from=value) %>%
+    flextable() |>
+    colformat_double() |>
+    theme_vanilla() |>
+    separate_header() %>%
+    add_header_row(values=c("Mixture","Bootstrap"),
+                   colwidths=c(1,12)) %>%
+    labelizor(part="header",labels=c("tree"="")) %>%
+    add_footer_lines("Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the set of mixture samples.") %>%
+    set_caption(caption="Cluster statistics by mixture and threshold.") %>%
+    fontsize(size=8.5, part="body") %>%
+    fontsize(size=8.5, part="header") #%>%
+    #set_table_properties(width=1, layout="autofit") %>%
+    #print(preview="docx")
+
+#save_as_docx(ft1,path="cluster_table.docx", pr_section=officer::prop_section(page_size=officer::page_size(orient="landscape")))
+
+kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("Bootstrap=70"=2,"Bootstrap=80"=2,"Bootstrap=85"=2,"Bootstrap=90"=2,"Bootstrap=95"=2,"Bootstrap=99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
+
+#kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("70"=2,"80"=2,"85"=2,"90"=2,"95"=2,"99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
 ```
 
-```{r clustsize_poisson, fig.cap="Supplementary figure of cluster size"}
-ggplot(samples_clustsize, aes(x=size,fill=tree)) + geom_bar(position="dodge") + facet_wrap(~bootstrap) + xlab("Size") + ylab("Count") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) + xlim(1,20) + scale_fill_viridis_d()
-```
-
-Sizes of clusters would be from `samples_allclusters`. Can provide average cluster size
-How change with changing mixtures and bootstraps - table
-```filter(samples_clustsize, size>200)```
-
-```{r samples_clustersize, eval=FALSE}
-
-test7 <- filter(samples_clustsize, id != 15) %>% group_by(threshold, tree) %>% summarise(mean=mean(size)) %>% pivot_wider(names_from=tree, values_from=mean)
-
-test8 <- filter(samples_clustsize, id != 15) %>% group_by(id, threshold, tree) %>% summarise(mean=mean(size))
-test8$tree <- c(0,10,20,30,40,50,60,70,80,90,100)[match(test8$tree, treenames)]
-ggplot(test8, aes(x=tree,y=mean)) + facet_wrap(~threshold) + geom_jitter(aes(color=tree)) + geom_smooth()
-p2 <- ggplot(test8, aes(x=tree,y=mean)) + geom_jitter(aes(color=threshold)) + geom_smooth(aes(group=threshold,color=threshold))
-
-#ggplot(filter(samples_clustsize, id != 15), aes(x=tree,y=size,fill=tree)) + geom_violin() + facet_wrap(~threshold) + xlab("Mixture") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
-
-#test7 <- filter(samples_clustsize, id != 15) %>% group_by(threshold, tree) %>% summarise(as_tibble_row(quantile(size)))
-
-# test7 <- samples_clustsize
-# test7$threshold <- as.numeric(test7$threshold)
-# test7$tree <- c(0,10,20,30,40,50,60,70,80,90,100)[match(samples_clustsize$tree, treenames)]
-```
-
-```{r samples_clusters, eval=FALSE}
+```{r samples_clusters, eval=FALSE, echo=FALSE}
 threshold <- c(70, 80, 85,90,95,99)
 
 # number of common clusters = tp
@@ -362,7 +408,7 @@ ggplot(filter(samples_cluster_compare, tree!="wgs"),aes(y=precision,x=recall,col
 
 # Figure 4: Clustering AMIs for trees
 
-```{r ami_sharedclust, eval=FALSE}
+```{r ami_sharedclust, echo=FALSE}
 samples_clustid <- lapply(samples_allclusters, function(sample) {
     tdf <- lapply(sample, function(threshold) {
         lapply(seq_along(threshold), function(n) {
@@ -410,9 +456,11 @@ samples_AMImean <- bind_rows(samples_AMI,.id="id") %>% group_by(threshold,mix) %
 #                                                                                   """
 # 
 
+#tiff(filename=file.path(PATH,"figures/fig4.tif"),res=300,width=2000,height=1200)
 ggplot(bind_rows(samples_AMI,.id="id") %>% filter(id != 15),aes(y=AMI,x=mix)) + geom_boxplot() + facet_wrap(~threshold) + xlab("Mixture") +
     theme_bw() +
     theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
 
 
 samples_clustid_wgsonly <- lapply(samples_clustid, function(x) filter(x, wgs != 0))
@@ -438,9 +486,39 @@ test7 <- test4 %>% group_by(tree, id) %>% summarise(prop=sum(shared)/n())
 ggplot(test7, aes(x=id, y=tree, fill=prop)) + geom_raster()
 ```
 
-## Parameters for trees
+# Figure 5: wgs50 phylogeny colored by tip sequence type
+
+```{r wgs50, echo=FALSE}
+wgs50 <- trees[[5]]
+wgs50align <- alignments$wgs50
+alignmentnames <- names(alignments$wgs50)
+firstwgs <- which(alignmentnames=="B.CN.02.02HNsc11.DQ007903")
+polseqs <- alignmentnames[1:firstwgs-1]
+wgsseqs <- alignmentnames[firstwgs:length(alignmentnames)]
+# check last one of polseqs and random one
+stopifnot(wgs50align[[polseqs[599]]][1:1000]==04)
+stopifnot(wgs50align[[polseqs[300]]][1:1000]==04)
+# check first, last, random wgsseq
+stopifnot(!all(wgs50align[[wgsseqs[1]]][1:1000]==04))
+stopifnot(!all(wgs50align[[wgsseqs[597]]][1:1000]==04))
+stopifnot(!all(wgs50align[[wgsseqs[399]]][1:1000]==04))
+seqtypedf <- data.frame(labels=alignmentnames, type=alignmentnames)
+colnames(seqtypedf) <- c("Labels", "Type")
+seqtypedf$Type[seqtypedf$Type %in% polseqs]<-"pol"
+seqtypedf$Type[seqtypedf$Type %in% wgsseqs]<-"wgs"
+testdf <- data.frame(labels=alignmentnames,dummy_bar_value=rep(1,length(alignmentnames)))
+p2 <- ggtree(wgs50) %<+% seqtypedf + geom_tippoint(aes(color=Type))
+#tiff(filename=file.path(PATH,"figures/fig5.tif"),res=300,width=1200,height=2000)
+p2 + geom_facet(panel="Type",data=testdf,geom=geom_col,aes(x=dummy_bar_value,color=Type,fill=Type),orientation='y')
+#dev.off()
+```
+
+# Figure 6 + supplementary: Substitution models for phylogeny
+
+This generates several figures, 3 of them are supplementary and 1 is the actual figure.
 
 ```{r params}
+# from R/loadparams.R
 wgsparams <- paramsdf(file.path(PATH,"results/trees/HIV1_FLT_2018_genome_DNA_subtypeB.fa.iqtree"))
 folders <- list.files(file.path(PATH,"results/trees/samples"))
 sampleparams <- lapply(folders, function(x) {
@@ -450,16 +528,32 @@ sampleparams <- Filter(Negate(is.null), sampleparams)
 
 paramdf <- lapply(sampleparams, function(x) bind_rows(x, .id="tree")) %>% bind_rows(., .id="id")
 wgsparams$id <- 1000
-wgsparams$tree <- "wgs"
+wgsparams$tree <- "wgs100"
 paramdf <- rbind(paramdf, wgsparams) %>%
-    mutate(tree=fct_relevel(tree,"pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs"))
-ggplot(filter(paramdf, Type=="Rate parameter R"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + xlab("Mixture") + theme_bw()
+    mutate(tree=fct_relevel(tree,"pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"))
 
-ggplot(filter(paramdf, Type=="State freq"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+#tiff(filename=file.path(PATH,"figures/fig6.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="Rate parameter R"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + xlab("Mixture") +
+    ylab("Rate") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
+```
 
-ggplot(filter(paramdf, Type=="relative rate"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+```{r params_statefreq}
+#tiff(filename=file.path(PATH,"figures/sup_fig1.tif"),res=300,width=1600,height=1600)
+ggplot(filter(paramdf, Type=="State freq"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
+```
 
-ggplot(filter(paramdf, Type=="rr proportion"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y")
+```{r params_relativerate}
+#tiff(filename=file.path(PATH,"figures/sup_fig2.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="relative rate"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
+```
+
+```{r params_rrprop}
+#tiff(filename=file.path(PATH,"figures/sup_fig3.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="rr proportion"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
 ```
 
 ```{r, rf_dist_fp, fig.cap="Sample to sample RF distances between all phylogenetic trees. Closer to yellow is farther away, and closer to green is closer.", warning=FALSE}
@@ -483,7 +577,7 @@ fpdists <- lapply(fptrees, function(x) {
     #melt(as.matrix(tree_geodist), varnames = c("row", "col"))
 })
 df_fpdists <- bind_rows(fpdists, .id="id")
-ggplot(filter(df_fpdists, row=="wgs" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter()
+ggplot(filter(df_fpdists, row=="wgs100" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter() + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
 ```
 
 ```{r rfdist_samplefp, eval=FALSE}
