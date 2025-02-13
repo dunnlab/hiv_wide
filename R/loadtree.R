@@ -3,7 +3,9 @@
 #' @param treepath Path to the tree files
 loadtree <- function(treepath, names, wgs=NULL) {
     treefiles <- list.files(treepath,".fa.treefile",full.names=TRUE)
-    trees <- lapply(treefiles, read.iqtree)
+    trees <- lapply(treefiles, function(x)
+        tryCatch(read.iqtree(x), error=function(e) NULL))
+    trees <- Filter(Negate(is.null), trees)
     if(!is.null(wgs)) {
         trees$wgs <- wgs
     }

@@ -25,10 +25,10 @@ loadparams <- function(treepath) {
 # https://en.wikipedia.org/wiki/Substitution_model
 paramsdf <- function(file) {
     lines <- readLines(file)
-    params <- str_extract_all(lines[c(40:45,49:52,63)], "[0-9]+.[0-9]+") %>%
-        flatten() %>% as.numeric()
+    params <- str_extract_all(lines[c(40:45,49:52,63)], "[0-9]+.[0-9]+") %>% purrr::flatten() %>%
+        as.numeric()
     relative_rates <- lapply(lines[66:70] %>% str_split("\\s+"), function(x) x[3:4]) %>%
-        flatten() %>% as.numeric()
+        purrr::flatten() %>% as.numeric()
     type <- c(rep("Rate parameter R",6),rep("State freq",4),"Gamma shape",rep(c("relative rate","rr proportion"),5))
     paramname <- c("A-C","A-G","A-T","C-G","C-T","G-T",
                    "pi(A)","pi(C)","pi(G)","pi(T)",
