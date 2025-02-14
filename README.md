@@ -1,19 +1,20 @@
-# hiv_wide
-pol vs whole analyses
+# T-shaped alignments integrating HIV-1 near full-length genome and partial pol sequences can improve phylodynamic inference of transmission clusters
 
-## Goals
-
-- [x] Make a single alignment of all full genomes to be considered. Obtain the start and stop positions of pol. ([#3](/../../issues/3), `LANL_alignment.tar.xz`)
-- [x] Randomize the order of the rows.
-- [x] Apply masks to all but pol for 0%, 10%, 20%, ... 100% of the rows, starting with the bottom row. This means that for example, the sequences masked in the 10% sample are a perfect subsample of those masked in the 20% sample. The resulting matrices would have a T shape, where the bar across the top is the sequences that are fully sampled and the vertical stem is the pol samples, with all other sites before and after masked (replaced with gaps).
-- [x] Do ML search and bootstraps for each of the 11 subsamples (including 0% masking)
-- [x] For each bipartition in the 0% masking tree, identify bootstrap support in each of the samples. Look for decay in support as progressively more sequences are masked. This gives a sense of false negatives, ie loss of signal, as we go from full genome to just pol.
-- [ ] Identify any strongly supported ML bipartitions in highly masked analyses that have low support in the unmasked matrix. This gives an example of false positives, ie relationships that have increased support as data are removed. These are cases where pol is potentially misleading.
-- [ ] Possibly randomize and repeat again, to assess sensitivity to order.
+This is the repository for our work on *T-shaped alignments*, a method to integrate near HIV-1 full-length genome and partial pol sequences for the purposes of phylodynamic inference of transmission clusters. It is under review at PLoS Computational Biology.
 
 ## Data
 
-Data are available in this [google drive folder](https://drive.google.com/drive/folders/1_v5C3hmwxQvOkPTAerSUu7ski1K_hLu1). After download, move the `clean` and `raw` directories to `public-hiv-data-20201202/`.
+Source data can be downloaded from the [HIV Sequence DB](https://www.hiv.lanl.gov/content/sequence/HIV/mainpage.html). Select 2018, HIV-1, full genome, alignment.
+
+First-stage intermediate data, i.e. masked alignments, phylogenetic trees, are available by request.
+
+Intermediate rds data for reproducing figures is directly in this repository.
+
+## To Reproduce
+
+To reproduce first-stage intermediate data directly from the source data, follow the scripts in order in the `scripts` directory. Scripts were written and run on the Slurm scheduler on [OSCAR](https://ccv.brown.edu/services/computing/), and you will likely need access to a HPC cluster yourself to run so many phylogenetic trees.
+
+To reproduce figures, change the `PATH` in `notebooks/figures.qmd` to where this repository is located, and execute. You will need the appropriate R packages as well as Quarto installed, otherwise it should run on your local machine without issue.
 
 ## Background
 
