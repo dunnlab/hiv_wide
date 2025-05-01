@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.353">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Figures for manuscript</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="figures_files/libs/clipboard/clipboard.min.js"></script>
+<script src="figures_files/libs/quarto-html/quarto.js"></script>
+<script src="figures_files/libs/quarto-html/popper.min.js"></script>
+<script src="figures_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="figures_files/libs/quarto-html/anchor.min.js"></script>
+<link href="figures_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="figures_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="figures_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="figures_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="figures_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+<script src="figures_files/libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="figures_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Figures for manuscript</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+</header>
+
+<section id="overview" class="level1">
+<h1>Overview</h1>
+<p>There are 11 different mixtures of alignments: whole genome, 10% wgs-90% pol, 20% wgs-80% pol, and so on up until 100% pol. For the mixtures i.e.&nbsp;10% wgs-90% pol up to 100% pol, we created 1000 samples of each by using different seeds to randomize the rows (sequences) and start the masking procedure. Then we inferred trees with iqtree, leading to 1000 sets of tree mixtures. There are 1196 tips on these trees, which comprise all subtype B.</p>
+<p>Running this notebook should reproduce all figures in the manuscript as long as the appropriate packages are installed. Some code for additional results and for different sections are included as well.</p>
+</section>
+<section id="main-findings" class="level1">
+<h1>Main findings</h1>
+<ul>
+<li>Distance between mixture trees and wgs tree remains around the same up to <code>wgs50</code>, then steadily decreases (i.e.&nbsp;mixture gets closer to wgs tree)</li>
+<li>Congruence between bootstrap values on mixture trees and wgs tree is minimal at <code>wgs60</code>.</li>
+<li>In terms of congruence between <code>pol</code> and the mixtures with clusters identified with pol, there is a dip to <code>wgs60</code>, and then congruence increases again. (Figures @ref(fig:lineplot-clusterpicker) and @ref(fig:heatmap-clusterpicker-bootstrap))</li>
+</ul>
+</section>
+<section id="setup-code-chunks" class="level1">
+<h1>Setup code chunks</h1>
+<p>We have a series of setup code chunks:</p>
+<ul>
+<li><code>setup:</code> Loads packages, all tree bootstraps (the most compute-intensive part so was saved as an object), alignment distanmces, manuscript specific code</li>
+<li><code>loadtrees:</code> Loads all trees, including maskgp120, samples, fixed parameter trees</li>
+<li><code>cluster_picker_load</code>, <code>alignment_load</code>, <code>get_bootstrap</code>: not run, creates objects loaded in <code>setup</code> and <code>loadtrees</code></li>
+<li><code>make_data_frame:</code> We put the trees into a dataframe that has as columns: the percent of full genome (0 through 100), the partition (as produced by prop.part), the bootstrap value of that partition (NA if doesn’t exist in tree for percent of full genome, otherwise bootstrap value). For code, see actual notebook file.</li>
+</ul>
+<p>We keep the labels separate from the dataframe for now because the names are extremely messy to keep as rows.</p>
+</section>
+<section id="figure-1-how-similar-are-the-trees" class="level1">
+<h1>Figure 1: How similar are the trees?</h1>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(phangorn)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'phangorn'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:aricode':
+
+    RI</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:plotly':
+
+    add_boxplot</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>dists <span class="ot">&lt;-</span> <span class="fu">lapply</span>(sampletrees, <span class="cf">function</span>(x) {</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    just_trees <span class="ot">&lt;-</span> <span class="fu">lapply</span>(x[[<span class="dv">1</span>]], <span class="cf">function</span>(y) y<span class="sc">@</span>phylo)[<span class="fu">c</span>(<span class="dv">11</span>,<span class="dv">1</span>,<span class="dv">2</span>,<span class="dv">3</span>,<span class="dv">4</span>,<span class="dv">5</span>,<span class="dv">6</span>,<span class="dv">7</span>,<span class="dv">8</span>,<span class="dv">9</span>,<span class="dv">10</span>)]</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">class</span>(just_trees) <span class="ot">&lt;-</span> <span class="st">"multiPhylo"</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    tree_rfdist <span class="ot">&lt;-</span> <span class="fu">dist.topo</span>(just_trees)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">#tree_rfdist &lt;- RobinsonFoulds(just_trees, normalize=TRUE)</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">#tree_rfdist &lt;- RF.dist(just_trees, normalize=TRUE, check.labels=FALSE)</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">melt</span>(<span class="fu">as.matrix</span>(tree_rfdist), <span class="at">varnames =</span> <span class="fu">c</span>(<span class="st">"row"</span>, <span class="st">"col"</span>))</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>df_dists <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(dists, <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co">#tiff(filename=file.path(PATH,"figures/fig1.tif"),res=300,width=1600,height=1200)</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(df_dists, row<span class="sc">==</span><span class="st">"wgs100"</span> <span class="sc">&amp;</span> value <span class="sc">!=</span> <span class="dv">0</span>), <span class="fu">aes</span>(<span class="at">x=</span>col, <span class="at">y=</span>value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="fu">aes</span>(<span class="at">alpha=</span><span class="fl">0.5</span>)) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">"Mixture"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Normalized Robinson-Foulds Distance"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">legend.position=</span><span class="st">"none"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures_files/figure-html/fig1_rfdist-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption class="figure-caption">RF distances between all phylogenetic tree mixtures and the wgs tree. Closer to 0 on the y-axis is closer to the wgs tree, further is further away.</figcaption>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">#dev.off()</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We compute the RF distance between all of our phylogenetic tree samples and create a boxplot for them (Figure @ref{fig:fig1_rfdist}). It does appear that the pol tree is most similar to the pol10-wgs90 tree, and that the RF distance increases as the wgs proportion increases.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>wgs50_dist <span class="ot">&lt;-</span> <span class="fu">filter</span>(df_dists, row<span class="sc">==</span><span class="st">"wgs100"</span> <span class="sc">&amp;</span> col<span class="sc">==</span><span class="st">"wgs50"</span>)<span class="sc">$</span>value</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>pol_dist <span class="ot">&lt;-</span> <span class="fu">filter</span>(df_dists, row<span class="sc">==</span><span class="st">"wgs100"</span> <span class="sc">&amp;</span> col<span class="sc">==</span><span class="st">"pol"</span>)<span class="sc">$</span>value</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>wgs40_dist <span class="ot">&lt;-</span> <span class="fu">filter</span>(df_dists, row<span class="sc">==</span><span class="st">"wgs100"</span> <span class="sc">&amp;</span> col<span class="sc">==</span><span class="st">"wgs40"</span>)<span class="sc">$</span>value</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>wgs30_dist <span class="ot">&lt;-</span> <span class="fu">filter</span>(df_dists, row<span class="sc">==</span><span class="st">"wgs100"</span> <span class="sc">&amp;</span> col<span class="sc">==</span><span class="st">"wgs30"</span>)<span class="sc">$</span>value</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="fu">t.test</span>(wgs50_dist)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+    One Sample t-test
+
+data:  wgs50_dist
+t = 1050.1, df = 62, p-value &lt; 2.2e-16
+alternative hypothesis: true mean is not equal to 0
+95 percent confidence interval:
+ 2067.042 2074.926
+sample estimates:
+mean of x 
+ 2070.984 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">t.test</span>(wgs50_dist, pol_dist, <span class="at">paired=</span><span class="cn">TRUE</span>, <span class="at">alternative=</span><span class="st">"less"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+    Paired t-test
+
+data:  wgs50_dist and pol_dist
+t = -9.5214, df = 62, p-value = 4.791e-14
+alternative hypothesis: true mean difference is less than 0
+95 percent confidence interval:
+      -Inf -17.98471
+sample estimates:
+mean difference 
+      -21.80952 </code></pre>
+</div>
+</div>
+</section>
+<section id="figure-2-pcoa-of-tree-distances" class="level1">
+<h1>Figure 2: PCoA of tree distances</h1>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">#samplephylos &lt;- lapply(sample.int(length(sampletrees), 20), function(x) lapply(sampletrees[[x]][[1]], as.phylo)) %&gt;% flatten</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co">#distances &lt;- ClusteringInfoDistance(samplephylos)</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co">#write_rds(file=file.path(RDATA,"clustering_sample_distances.rds"),distances)</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>distances <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="at">file=</span><span class="fu">file.path</span>(RDATA, <span class="st">"clustering_sample_distances.rds"</span>))</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>test_dist <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(distances)[<span class="sc">-</span><span class="fu">c</span>(<span class="dv">11</span>,<span class="dv">22</span>,<span class="dv">33</span>,<span class="dv">44</span>,<span class="dv">55</span>,<span class="dv">66</span>,<span class="dv">77</span>,<span class="dv">88</span>,<span class="dv">99</span>,<span class="dv">110</span>,<span class="dv">121</span>,<span class="dv">132</span>,<span class="dv">143</span>,<span class="dv">154</span>,<span class="dv">165</span>,<span class="dv">176</span>,<span class="dv">187</span>,<span class="dv">198</span>,<span class="dv">209</span>),<span class="sc">-</span><span class="fu">c</span>(<span class="dv">11</span>,<span class="dv">22</span>,<span class="dv">33</span>,<span class="dv">44</span>,<span class="dv">55</span>,<span class="dv">66</span>,<span class="dv">77</span>,<span class="dv">88</span>,<span class="dv">99</span>,<span class="dv">110</span>,<span class="dv">121</span>,<span class="dv">132</span>,<span class="dv">143</span>,<span class="dv">154</span>,<span class="dv">165</span>,<span class="dv">176</span>,<span class="dv">187</span>,<span class="dv">198</span>,<span class="dv">209</span>)]</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>pcoa <span class="ot">&lt;-</span> <span class="fu">cmdscale</span>(test_dist, <span class="at">eig=</span><span class="cn">TRUE</span>, <span class="at">k=</span><span class="dv">12</span>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>mapping <span class="ot">&lt;-</span> pcoa<span class="sc">$</span>points[,<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co">#mapping &lt;- pcoa$points[,2:3]</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>mix <span class="ot">&lt;-</span> <span class="fu">rownames</span>(mapping)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>mapping <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(mapping, <span class="at">Mixture=</span>mix)</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="fu">tiff</span>(<span class="at">filename=</span><span class="fu">file.path</span>(PATH,<span class="st">"figures/fig2.tif"</span>),<span class="at">res=</span><span class="dv">300</span>,<span class="at">width=</span><span class="dv">1600</span>,<span class="at">height=</span><span class="dv">1600</span>)</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(mapping) <span class="sc">+</span> <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>X1, <span class="at">y=</span>X2, <span class="at">color=</span>Mixture)) <span class="sc">+</span> <span class="fu">theme_bw</span>() <span class="sc">+</span> <span class="fu">coord_fixed</span>(<span class="at">xlim=</span><span class="fu">c</span>(<span class="sc">-</span><span class="dv">60</span>,<span class="dv">60</span>),<span class="at">ylim=</span><span class="fu">c</span>(<span class="sc">-</span><span class="dv">60</span>,<span class="dv">60</span>)) <span class="sc">+</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">color=</span><span class="st">"Mixture"</span>) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">"X (8.09% Percent Variance)"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Y (2.59% Percent Variance)"</span>)</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="fu">dev.off</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>quartz_off_screen 
+                2 </code></pre>
+</div>
+</div>
+<p>Figure @ref{fig:fig2_pcoa}. To get the percent variance, we took the eigenvalues of the <code>pcoa</code> object and divided the first 2 by the total sum:</p>
+<ul>
+<li><code>pcoa$eig[1]/sum(pcoa$eig)</code>: 0.0808691</li>
+<li><code>pcoa$eig[2]/sum(pcoa$eig)</code>: 0.0258566</li>
+</ul>
+</section>
+<section id="clustering-results" class="level1">
+<h1>Clustering results</h1>
+<section id="figure-3-clustering-changes-with-mixtures-and-bootstraps" class="level2">
+<h2 class="anchored" data-anchor-id="figure-3-clustering-changes-with-mixtures-and-bootstraps">Figure 3: Clustering changes with mixtures and bootstraps</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total clusters</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>samples_totalclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_allclusters, <span class="cf">function</span>(threshold) {</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    tcdf <span class="ot">&lt;-</span> <span class="fu">sapply</span>(threshold, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">length</span>(x[[<span class="dv">3</span>]]))) <span class="sc">%&gt;%</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="fu">data.frame</span>()</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(tcdf) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    tcdf<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(tcdf)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    tcdf <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(tcdf, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>,<span class="at">values_to=</span><span class="st">"totalclust"</span>)</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tcdf)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>samples_totalclust <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(samples_totalclust, <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>samples_totalclust<span class="sc">$</span>tree[samples_totalclust<span class="sc">$</span>tree<span class="sc">==</span><span class="st">"wgs"</span>] <span class="ot">&lt;-</span> <span class="st">"wgs100"</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>samples_totalclust<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">factor</span>(samples_totalclust<span class="sc">$</span>tree, <span class="at">levels=</span><span class="fu">c</span>(<span class="st">"pol"</span>,<span class="st">"wgs10"</span>,<span class="st">"wgs20"</span>,<span class="st">"wgs30"</span>,<span class="st">"wgs40"</span>,<span class="st">"wgs50"</span>,<span class="st">"wgs60"</span>,<span class="st">"wgs70"</span>,<span class="st">"wgs80"</span>,<span class="st">"wgs90"</span>,<span class="st">"wgs100"</span>))</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>samples_totalclust<span class="sc">$</span>numerical_tree <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">10</span>,<span class="dv">20</span>,<span class="dv">30</span>,<span class="dv">40</span>,<span class="dv">50</span>,<span class="dv">60</span>,<span class="dv">70</span>,<span class="dv">80</span>,<span class="dv">90</span>,<span class="dv">100</span>)[<span class="fu">match</span>(samples_totalclust<span class="sc">$</span>tree, treenames)]</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co"># size of clusters</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>samples_clustsize <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_allclusters, <span class="cf">function</span>(sample) {</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    df <span class="ot">&lt;-</span> <span class="fu">lapply</span>(sample, <span class="cf">function</span>(threshold) {</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>        sizes <span class="ot">&lt;-</span> <span class="fu">sapply</span>(threshold, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y[[<span class="dv">1</span>]], length))</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        sizes_df <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(sizes, data.frame), <span class="at">.id=</span><span class="st">"tree"</span>)</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        <span class="fu">colnames</span>(sizes_df) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"tree"</span>, <span class="st">"size"</span>)</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        <span class="fu">return</span>(sizes_df)</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>    df <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(df, <span class="at">.id=</span><span class="st">"threshold"</span>)</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(df)</span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>samples_clustsize <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(samples_clustsize, <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>samples_clustsize<span class="sc">$</span>tree[samples_clustsize<span class="sc">$</span>tree<span class="sc">==</span><span class="st">"wgs"</span>] <span class="ot">&lt;-</span> <span class="st">"wgs100"</span></span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>samples_clustsize<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">factor</span>(samples_clustsize<span class="sc">$</span>tree, <span class="at">levels=</span><span class="fu">c</span>(<span class="st">"pol"</span>,<span class="st">"wgs10"</span>,<span class="st">"wgs20"</span>,<span class="st">"wgs30"</span>,<span class="st">"wgs40"</span>,<span class="st">"wgs50"</span>,<span class="st">"wgs60"</span>,<span class="st">"wgs70"</span>,<span class="st">"wgs80"</span>,<span class="st">"wgs90"</span>,<span class="st">"wgs100"</span>))</span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>(samples_clustsize) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"id"</span>, <span class="st">"bootstrap"</span>, <span class="st">"tree"</span>, <span class="st">"size"</span>)</span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a>samples_clustsize<span class="sc">$</span>numerical_tree <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">10</span>,<span class="dv">20</span>,<span class="dv">30</span>,<span class="dv">40</span>,<span class="dv">50</span>,<span class="dv">60</span>,<span class="dv">70</span>,<span class="dv">80</span>,<span class="dv">90</span>,<span class="dv">100</span>)[<span class="fu">match</span>(samples_clustsize<span class="sc">$</span>tree, treenames)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>For the number of clusters and size of clusters, we compute two dataframes, <code>samples_totalclust</code> and <code>samples_clustsize</code>. The <code>samples_totalclust</code> will be used later as well to help compute AMI, but for <code>sample_clustsize</code> we will compute the mean cluster size to summarize the cluster size distribution in a dataframe <code>samples_mean_clustsize</code>. In general all of them follow a Poisson distribution with mostly clusters of size 2, with larger clusters as more rare. (Supplementary Figure)</p>
+<p>One sample, 15 was left out as it was a major outlier in cluster size: <code>filter(samples_clustsize, id==15) %&gt;% group_by(bootstrap, tree) %&gt;% summarise(max=max(size))</code>.</p>
+<p>For the cluster size and number of clusters, we make both a table and a side-by-side plot of cluster sizes and numbers.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>samples_totalclust <span class="ot">&lt;-</span> <span class="fu">filter</span>(samples_totalclust, id <span class="sc">!=</span> <span class="dv">15</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>samples_clustsize <span class="ot">&lt;-</span> <span class="fu">filter</span>(samples_clustsize, id <span class="sc">!=</span> <span class="dv">15</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>samples_mean_clustsize <span class="ot">&lt;-</span> samples_clustsize <span class="sc">%&gt;%</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(id, bootstrap, tree) <span class="sc">%&gt;%</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarise</span>(<span class="at">mean=</span><span class="fu">mean</span>(size))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>`summarise()` has grouped output by 'id', 'bootstrap'. You can override using
+the `.groups` argument.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">filter</span>(samples_totalclust, id <span class="sc">!=</span> <span class="dv">15</span>) <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(bootstrap, tree) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="at">mean=</span><span class="fu">mean</span>(totalclust)) <span class="sc">%&gt;%</span> <span class="fu">pivot_wider</span>(<span class="at">names_from=</span>tree, <span class="at">values_from=</span>mean)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>`summarise()` has grouped output by 'bootstrap'. You can override using the
+`.groups` argument.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 12
+# Groups:   bootstrap [6]
+  bootstrap   pol wgs10 wgs20 wgs30 wgs40 wgs50 wgs60 wgs70 wgs80 wgs90 wgs100
+  &lt;chr&gt;     &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;
+1 70         258.  251.  248.  244.  251.  247.  247.  246.  248.  248.    240
+2 80         256.  251.  243.  241.  243.  241.  239.  240.  243.  245.    241
+3 85         251.  245.  234.  232.  234.  234.  230.  231.  235.  240.    245
+4 90         238.  231.  220.  218.  217.  217.  214   214.  222.  226.    241
+5 95         209.  205   195.  189.  188.  188.  187.  188.  198.  204.    216
+6 99         149.  147   144.  139.  138.  136   140.  145.  155.  165.    176</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>samples_clustchange <span class="ot">&lt;-</span> <span class="fu">left_join</span>(samples_totalclust, samples_mean_clustsize)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Joining with `by = join_by(id, tree, bootstrap)`</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(patchwork)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(samples_clustchange, <span class="fu">aes</span>(<span class="at">x=</span>numerical_tree,<span class="at">y=</span>totalclust)) <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="fu">aes</span>(<span class="at">color=</span>bootstrap)) <span class="sc">+</span> <span class="fu">geom_smooth</span>(<span class="fu">aes</span>(<span class="at">group=</span>bootstrap,<span class="at">color=</span>bootstrap)) <span class="sc">+</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_bw</span>() <span class="sc">+</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">xlab</span>(<span class="st">"wgs Percentage"</span>) <span class="sc">+</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ylab</span>(<span class="st">"Cluster Number"</span>) <span class="sc">+</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.position=</span><span class="st">"none"</span>) <span class="sc">+</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(<span class="st">"Cluster Number"</span>)</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(samples_clustchange, <span class="fu">aes</span>(<span class="at">x=</span>numerical_tree,<span class="at">y=</span>mean,<span class="at">color=</span>bootstrap)) <span class="sc">+</span> <span class="fu">geom_jitter</span>() <span class="sc">+</span> <span class="fu">geom_smooth</span>() <span class="sc">+</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_bw</span>() <span class="sc">+</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">xlab</span>(<span class="st">"wgs Percentage"</span>) <span class="sc">+</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ylab</span>(<span class="st">"Mean Cluster Size"</span>) <span class="sc">+</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(<span class="st">"Mean Cluster Size"</span>) <span class="sc">+</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">guides</span>(<span class="at">color=</span><span class="fu">guide_legend</span>(<span class="at">title=</span><span class="st">"Bootstrap"</span>))</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="co">#tiff(filename=file.path(PATH,"figures/fig3.tif"),res=300,width=1800,height=1400)</span></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>p1 <span class="sc">+</span> p2 <span class="sc">+</span> <span class="fu">plot_annotation</span>(<span class="at">tag_levels =</span> <span class="st">'A'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>`geom_smooth()` using method = 'loess' and formula = 'y ~ x'
+`geom_smooth()` using method = 'loess' and formula = 'y ~ x'</code></pre>
+</div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/clustfilter-1.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co">#dev.off()</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>table_clustchange <span class="ot">&lt;-</span> samples_clustchange <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(bootstrap, tree) <span class="sc">%&gt;%</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarise</span>(<span class="st">"Mean Number of Clusters"</span><span class="ot">=</span><span class="fu">mean</span>(totalclust), <span class="st">"Mean Cluster Size"</span><span class="ot">=</span><span class="fu">mean</span>(mean)) <span class="sc">%&gt;%</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_longer</span>(<span class="at">names_to=</span><span class="st">"stat"</span>, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"Mean Number of Clusters"</span>,<span class="st">"Mean Cluster Size"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from=</span>tree, <span class="at">values_from=</span>value)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>`summarise()` has grouped output by 'bootstrap'. You can override using the
+`.groups` argument.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(flextable)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: package 'flextable' was built under R version 4.3.3</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'flextable'
+
+The following objects are masked from 'package:kableExtra':
+
+    as_image, footnote
+
+The following objects are masked from 'package:plotly':
+
+    highlight, style
+
+The following object is masked from 'package:purrr':
+
+    compose
+
+The following object is masked from 'package:ape':
+
+    rotate
+
+The following object is masked from 'package:ggtree':
+
+    rotate</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>ft1 <span class="ot">&lt;-</span> samples_clustchange <span class="sc">%&gt;%</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(id <span class="sc">!=</span> <span class="dv">15</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(bootstrap, tree) <span class="sc">%&gt;%</span></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarise</span>(<span class="st">"Number"</span><span class="ot">=</span><span class="fu">mean</span>(totalclust), <span class="st">"Size"</span><span class="ot">=</span><span class="fu">mean</span>(mean)) <span class="sc">%&gt;%</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_longer</span>(<span class="at">names_to=</span><span class="st">"stat"</span>, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"Number"</span>,<span class="st">"Size"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from=</span><span class="fu">c</span>(bootstrap,stat), <span class="at">values_from=</span>value) <span class="sc">%&gt;%</span></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">flextable</span>() <span class="sc">|&gt;</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">colformat_double</span>() <span class="sc">|&gt;</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_vanilla</span>() <span class="sc">|&gt;</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">separate_header</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_header_row</span>(<span class="at">values=</span><span class="fu">c</span>(<span class="st">"Mixture"</span>,<span class="st">"Bootstrap"</span>),</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>                   <span class="at">colwidths=</span><span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">12</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labelizor</span>(<span class="at">part=</span><span class="st">"header"</span>,<span class="at">labels=</span><span class="fu">c</span>(<span class="st">"tree"</span><span class="ot">=</span><span class="st">""</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_footer_lines</span>(<span class="st">"Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the set of mixture samples."</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">set_caption</span>(<span class="at">caption=</span><span class="st">"Cluster statistics by mixture and threshold."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>`summarise()` has grouped output by 'bootstrap'. You can override using the
+`.groups` argument.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">save_as_docx</span>(ft1,<span class="at">path=</span><span class="st">"cluster_table.docx"</span>)</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kbl</span>(<span class="fu">select</span>(<span class="fu">ungroup</span>(table_clustchange),stat<span class="sc">:</span>wgs100), <span class="at">digits=</span><span class="dv">3</span>, <span class="at">col.names=</span><span class="fu">c</span>(<span class="st">"Stat"</span>,<span class="st">"pol"</span>,<span class="st">"wgs10"</span>,<span class="st">"wgs20"</span>,<span class="st">"wgs30"</span>,<span class="st">"wgs40"</span>,<span class="st">"wgs50"</span>,<span class="st">"wgs60"</span>,<span class="st">"wgs70"</span>,<span class="st">"wgs80"</span>,<span class="st">"wgs90"</span>,<span class="st">"wgs100"</span>), <span class="at">caption=</span><span class="st">"Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run."</span>) <span class="sc">%&gt;%</span> <span class="fu">pack_rows</span>(<span class="at">index=</span><span class="fu">c</span>(<span class="st">"Bootstrap=70"</span><span class="ot">=</span><span class="dv">2</span>,<span class="st">"Bootstrap=80"</span><span class="ot">=</span><span class="dv">2</span>,<span class="st">"Bootstrap=85"</span><span class="ot">=</span><span class="dv">2</span>,<span class="st">"Bootstrap=90"</span><span class="ot">=</span><span class="dv">2</span>,<span class="st">"Bootstrap=95"</span><span class="ot">=</span><span class="dv">2</span>,<span class="st">"Bootstrap=99"</span><span class="ot">=</span><span class="dv">2</span>),<span class="at">label_row_css =</span> <span class="st">"background-color: #666; color: #fff;"</span>) <span class="sc">%&gt;%</span> <span class="fu">kable_paper</span>(<span class="st">"striped"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-paper lightable-striped table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">Stat</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">pol</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs10</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs20</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs30</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs40</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs50</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs60</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs70</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs80</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs90</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">wgs100</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=70</strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">257.826</td>
+<td style="text-align: right;">250.957</td>
+<td style="text-align: right;">248.217</td>
+<td style="text-align: right;">244.217</td>
+<td style="text-align: right;">250.870</td>
+<td style="text-align: right;">247.435</td>
+<td style="text-align: right;">247.130</td>
+<td style="text-align: right;">245.957</td>
+<td style="text-align: right;">247.826</td>
+<td style="text-align: right;">248.217</td>
+<td style="text-align: right;">240.000</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">3.382</td>
+<td style="text-align: right;">3.457</td>
+<td style="text-align: right;">3.319</td>
+<td style="text-align: right;">3.357</td>
+<td style="text-align: right;">3.270</td>
+<td style="text-align: right;">3.294</td>
+<td style="text-align: right;">3.281</td>
+<td style="text-align: right;">3.334</td>
+<td style="text-align: right;">3.409</td>
+<td style="text-align: right;">3.459</td>
+<td style="text-align: right;">3.767</td>
+</tr>
+<tr class="even" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=80</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">256.391</td>
+<td style="text-align: right;">251.130</td>
+<td style="text-align: right;">243.087</td>
+<td style="text-align: right;">240.957</td>
+<td style="text-align: right;">242.652</td>
+<td style="text-align: right;">241.348</td>
+<td style="text-align: right;">239.043</td>
+<td style="text-align: right;">240.217</td>
+<td style="text-align: right;">242.957</td>
+<td style="text-align: right;">244.739</td>
+<td style="text-align: right;">241.000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">3.045</td>
+<td style="text-align: right;">3.112</td>
+<td style="text-align: right;">3.010</td>
+<td style="text-align: right;">3.010</td>
+<td style="text-align: right;">2.968</td>
+<td style="text-align: right;">2.979</td>
+<td style="text-align: right;">2.999</td>
+<td style="text-align: right;">3.005</td>
+<td style="text-align: right;">3.087</td>
+<td style="text-align: right;">3.153</td>
+<td style="text-align: right;">3.390</td>
+</tr>
+<tr class="odd" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=85</strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">251.043</td>
+<td style="text-align: right;">244.522</td>
+<td style="text-align: right;">234.304</td>
+<td style="text-align: right;">232.478</td>
+<td style="text-align: right;">234.087</td>
+<td style="text-align: right;">234.348</td>
+<td style="text-align: right;">229.913</td>
+<td style="text-align: right;">231.261</td>
+<td style="text-align: right;">235.043</td>
+<td style="text-align: right;">239.957</td>
+<td style="text-align: right;">245.000</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">2.888</td>
+<td style="text-align: right;">2.956</td>
+<td style="text-align: right;">2.872</td>
+<td style="text-align: right;">2.869</td>
+<td style="text-align: right;">2.816</td>
+<td style="text-align: right;">2.806</td>
+<td style="text-align: right;">2.856</td>
+<td style="text-align: right;">2.849</td>
+<td style="text-align: right;">2.929</td>
+<td style="text-align: right;">3.001</td>
+<td style="text-align: right;">3.151</td>
+</tr>
+<tr class="even" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=90</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">238.391</td>
+<td style="text-align: right;">230.783</td>
+<td style="text-align: right;">219.609</td>
+<td style="text-align: right;">217.957</td>
+<td style="text-align: right;">216.826</td>
+<td style="text-align: right;">216.696</td>
+<td style="text-align: right;">214.000</td>
+<td style="text-align: right;">213.826</td>
+<td style="text-align: right;">222.261</td>
+<td style="text-align: right;">226.391</td>
+<td style="text-align: right;">241.000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">2.710</td>
+<td style="text-align: right;">2.783</td>
+<td style="text-align: right;">2.728</td>
+<td style="text-align: right;">2.714</td>
+<td style="text-align: right;">2.684</td>
+<td style="text-align: right;">2.682</td>
+<td style="text-align: right;">2.721</td>
+<td style="text-align: right;">2.726</td>
+<td style="text-align: right;">2.795</td>
+<td style="text-align: right;">2.886</td>
+<td style="text-align: right;">2.983</td>
+</tr>
+<tr class="odd" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=95</strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">208.522</td>
+<td style="text-align: right;">205.000</td>
+<td style="text-align: right;">194.957</td>
+<td style="text-align: right;">189.478</td>
+<td style="text-align: right;">188.087</td>
+<td style="text-align: right;">187.565</td>
+<td style="text-align: right;">187.043</td>
+<td style="text-align: right;">187.652</td>
+<td style="text-align: right;">198.217</td>
+<td style="text-align: right;">203.870</td>
+<td style="text-align: right;">216.000</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">2.552</td>
+<td style="text-align: right;">2.588</td>
+<td style="text-align: right;">2.555</td>
+<td style="text-align: right;">2.548</td>
+<td style="text-align: right;">2.551</td>
+<td style="text-align: right;">2.539</td>
+<td style="text-align: right;">2.558</td>
+<td style="text-align: right;">2.578</td>
+<td style="text-align: right;">2.627</td>
+<td style="text-align: right;">2.746</td>
+<td style="text-align: right;">2.815</td>
+</tr>
+<tr class="even" data-grouplength="2">
+<td colspan="12" style="background-color: #666; color: #fff"><strong>Bootstrap=99</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Number of Clusters</td>
+<td style="text-align: right;">149.435</td>
+<td style="text-align: right;">147.000</td>
+<td style="text-align: right;">143.870</td>
+<td style="text-align: right;">138.652</td>
+<td style="text-align: right;">138.174</td>
+<td style="text-align: right;">136.000</td>
+<td style="text-align: right;">139.652</td>
+<td style="text-align: right;">145.174</td>
+<td style="text-align: right;">154.783</td>
+<td style="text-align: right;">164.783</td>
+<td style="text-align: right;">176.000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left; padding-left: 2em;" data-indentlevel="1">Mean Cluster Size</td>
+<td style="text-align: right;">2.358</td>
+<td style="text-align: right;">2.398</td>
+<td style="text-align: right;">2.376</td>
+<td style="text-align: right;">2.370</td>
+<td style="text-align: right;">2.404</td>
+<td style="text-align: right;">2.401</td>
+<td style="text-align: right;">2.418</td>
+<td style="text-align: right;">2.433</td>
+<td style="text-align: right;">2.494</td>
+<td style="text-align: right;">2.588</td>
+<td style="text-align: right;">2.693</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co"># kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %&gt;% pack_rows(index=c("70"=2,"80"=2,"85"=2,"90"=2,"95"=2,"99"=2),label_row_css = "background-color: #666; color: #fff;") %&gt;% kable_paper("striped")</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(samples_clustsize, <span class="fu">aes</span>(<span class="at">x=</span>size,<span class="at">fill=</span>tree)) <span class="sc">+</span> <span class="fu">geom_bar</span>(<span class="at">position=</span><span class="st">"dodge"</span>) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>bootstrap) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">"Size"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Count"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">axis.text.x=</span><span class="fu">element_text</span>(<span class="at">angle=</span><span class="dv">90</span>,<span class="at">vjust=</span><span class="fl">0.5</span>,<span class="at">hjust=</span><span class="dv">1</span>)) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="dv">1</span>,<span class="dv">20</span>) <span class="sc">+</span> <span class="fu">scale_fill_viridis_d</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: Removed 83 rows containing non-finite outside the scale range
+(`stat_count()`).</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: Removed 5 rows containing missing values or values outside the scale range
+(`geom_bar()`).</code></pre>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures_files/figure-html/clustsize_poisson-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption class="figure-caption">Supplementary figure of cluster size</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>Sizes of clusters would be from <code>samples_allclusters</code>. Can provide average cluster size How change with changing mixtures and bootstraps - table <code>filter(samples_clustsize, size&gt;200)</code></p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>test7 <span class="ot">&lt;-</span> <span class="fu">filter</span>(samples_clustsize, id <span class="sc">!=</span> <span class="dv">15</span>) <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(threshold, tree) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="at">mean=</span><span class="fu">mean</span>(size)) <span class="sc">%&gt;%</span> <span class="fu">pivot_wider</span>(<span class="at">names_from=</span>tree, <span class="at">values_from=</span>mean)</span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>test8 <span class="ot">&lt;-</span> <span class="fu">filter</span>(samples_clustsize, id <span class="sc">!=</span> <span class="dv">15</span>) <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(id, threshold, tree) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="at">mean=</span><span class="fu">mean</span>(size))</span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a>test8<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">10</span>,<span class="dv">20</span>,<span class="dv">30</span>,<span class="dv">40</span>,<span class="dv">50</span>,<span class="dv">60</span>,<span class="dv">70</span>,<span class="dv">80</span>,<span class="dv">90</span>,<span class="dv">100</span>)[<span class="fu">match</span>(test8<span class="sc">$</span>tree, treenames)]</span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(test8, <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>mean)) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>threshold) <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="fu">aes</span>(<span class="at">color=</span>tree)) <span class="sc">+</span> <span class="fu">geom_smooth</span>()</span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(test8, <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>mean)) <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="fu">aes</span>(<span class="at">color=</span>threshold)) <span class="sc">+</span> <span class="fu">geom_smooth</span>(<span class="fu">aes</span>(<span class="at">group=</span>threshold,<span class="at">color=</span>threshold))</span>
+<span id="cb36-7"><a href="#cb36-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-8"><a href="#cb36-8" aria-hidden="true" tabindex="-1"></a><span class="co">#ggplot(filter(samples_clustsize, id != 15), aes(x=tree,y=size,fill=tree)) + geom_violin() + facet_wrap(~threshold) + xlab("Mixture") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))</span></span>
+<span id="cb36-9"><a href="#cb36-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-10"><a href="#cb36-10" aria-hidden="true" tabindex="-1"></a><span class="co">#test7 &lt;- filter(samples_clustsize, id != 15) %&gt;% group_by(threshold, tree) %&gt;% summarise(as_tibble_row(quantile(size)))</span></span>
+<span id="cb36-11"><a href="#cb36-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-12"><a href="#cb36-12" aria-hidden="true" tabindex="-1"></a><span class="co"># test7 &lt;- samples_clustsize</span></span>
+<span id="cb36-13"><a href="#cb36-13" aria-hidden="true" tabindex="-1"></a><span class="co"># test7$threshold &lt;- as.numeric(test7$threshold)</span></span>
+<span id="cb36-14"><a href="#cb36-14" aria-hidden="true" tabindex="-1"></a><span class="co"># test7$tree &lt;- c(0,10,20,30,40,50,60,70,80,90,100)[match(samples_clustsize$tree, treenames)]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>threshold <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">70</span>, <span class="dv">80</span>, <span class="dv">85</span>,<span class="dv">90</span>,<span class="dv">95</span>,<span class="dv">99</span>)</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="co"># number of common clusters = tp</span></span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a>samples_sharedclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_allclusters, <span class="cf">function</span>(threshold) {</span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>    tdf <span class="ot">&lt;-</span> <span class="fu">sapply</span>(threshold, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">intersect</span>(x[[<span class="dv">3</span>]],y<span class="sc">$</span>wgs[[<span class="dv">3</span>]]) <span class="sc">%&gt;%</span> length)) <span class="sc">%&gt;%</span></span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">data.frame</span>()</span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(tdf) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a>    tdf<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(tdf)</span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a>    tdf <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(tdf, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>, <span class="at">values_to=</span><span class="st">"tp"</span>)</span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tdf)</span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>samples_sharedclust <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(samples_sharedclust, <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total - common = clusters specific to given tree = fp</span></span>
+<span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a><span class="co"># number of wgs - common = clusters specific to wgs = fn</span></span>
+<span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a><span class="co"># https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group</span></span>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a><span class="co"># number of possible clusters is number of nodes in tree which here we know is 1194</span></span>
+<span id="cb37-18"><a href="#cb37-18" aria-hidden="true" tabindex="-1"></a><span class="co"># 1194 - fn = tn</span></span>
+<span id="cb37-19"><a href="#cb37-19" aria-hidden="true" tabindex="-1"></a>samples_cluster_compare <span class="ot">&lt;-</span> samples_totalclust <span class="sc">%&gt;%</span> <span class="fu">left_join</span>(samples_sharedclust) <span class="sc">%&gt;%</span></span>
+<span id="cb37-20"><a href="#cb37-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fp=</span>totalclust<span class="sc">-</span>tp) <span class="sc">%&gt;%</span></span>
+<span id="cb37-21"><a href="#cb37-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(bootstrap) <span class="sc">%&gt;%</span></span>
+<span id="cb37-22"><a href="#cb37-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fn=</span>totalclust[tree<span class="sc">==</span><span class="st">"wgs"</span>]<span class="sc">-</span>tp, <span class="at">tn=</span><span class="dv">1194</span><span class="sc">-</span>fn, <span class="at">precision=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fp),<span class="at">recall=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fn))</span>
+<span id="cb37-23"><a href="#cb37-23" aria-hidden="true" tabindex="-1"></a>samples_cluster_compare<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">factor</span>(samples_cluster_compare<span class="sc">$</span>tree, <span class="at">order=</span><span class="cn">TRUE</span>, <span class="at">levels=</span><span class="fu">c</span>(<span class="st">"pol"</span>,<span class="st">"wgs10"</span>,<span class="st">"wgs20"</span>,<span class="st">"wgs30"</span>,<span class="st">"wgs40"</span>,<span class="st">"wgs50"</span>,<span class="st">"wgs60"</span>,<span class="st">"wgs70"</span>,<span class="st">"wgs80"</span>,<span class="st">"wgs90"</span>,<span class="st">"wgs"</span>))</span>
+<span id="cb37-24"><a href="#cb37-24" aria-hidden="true" tabindex="-1"></a>samples_cluster_compare <span class="ot">&lt;-</span> <span class="fu">mutate</span>(samples_cluster_compare, <span class="at">F1=</span>(<span class="dv">2</span><span class="sc">*</span>precision<span class="sc">*</span>recall)<span class="sc">/</span>(precision<span class="sc">+</span>recall))</span>
+<span id="cb37-25"><a href="#cb37-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-26"><a href="#cb37-26" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(samples_cluster_compare, tree<span class="sc">!=</span><span class="st">"wgs"</span>),<span class="fu">aes</span>(<span class="at">y=</span>precision,<span class="at">x=</span>recall,<span class="at">color=</span>tree)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>bootstrap, <span class="at">scale=</span><span class="st">"free"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+</section>
+<section id="figure-4-clustering-amis-for-trees" class="level1">
+<h1>Figure 4: Clustering AMIs for trees</h1>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>samples_clustid <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_allclusters, <span class="cf">function</span>(sample) {</span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>    tdf <span class="ot">&lt;-</span> <span class="fu">lapply</span>(sample, <span class="cf">function</span>(threshold) {</span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>        <span class="fu">lapply</span>(<span class="fu">seq_along</span>(threshold), <span class="cf">function</span>(n) {</span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a>            mix <span class="ot">&lt;-</span> threshold[[n]]</span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>            mixname <span class="ot">&lt;-</span> <span class="fu">names</span>(threshold)[n]</span>
+<span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a>            mixid <span class="ot">&lt;-</span> mix[[<span class="dv">2</span>]]</span>
+<span id="cb38-7"><a href="#cb38-7" aria-hidden="true" tabindex="-1"></a>            <span class="fu">names</span>(mixid) <span class="ot">&lt;-</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(mixid)</span>
+<span id="cb38-8"><a href="#cb38-8" aria-hidden="true" tabindex="-1"></a>            mixdf <span class="ot">&lt;-</span> <span class="fu">unlist</span>(mixid)</span>
+<span id="cb38-9"><a href="#cb38-9" aria-hidden="true" tabindex="-1"></a>            mixdf <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">id=</span>mixdf,<span class="at">clust=</span><span class="fu">names</span>(mixdf)) <span class="sc">%&gt;%</span></span>
+<span id="cb38-10"><a href="#cb38-10" aria-hidden="true" tabindex="-1"></a>                <span class="fu">mutate</span>(<span class="at">clust=</span><span class="fu">substr</span>(clust,<span class="dv">1</span>,<span class="fu">nchar</span>(clust)<span class="sc">-</span><span class="dv">1</span>))</span>
+<span id="cb38-11"><a href="#cb38-11" aria-hidden="true" tabindex="-1"></a>            <span class="fu">names</span>(mixdf) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"id"</span>,mixname)</span>
+<span id="cb38-12"><a href="#cb38-12" aria-hidden="true" tabindex="-1"></a>            <span class="fu">return</span>(mixdf)</span>
+<span id="cb38-13"><a href="#cb38-13" aria-hidden="true" tabindex="-1"></a>            }) <span class="sc">%&gt;%</span></span>
+<span id="cb38-14"><a href="#cb38-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">reduce</span>(full_join,<span class="at">by=</span><span class="fu">c</span>(<span class="st">"id"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb38-15"><a href="#cb38-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">replace</span>(<span class="fu">is.na</span>(.),<span class="dv">0</span>) <span class="co"># replace all NAs</span></span>
+<span id="cb38-16"><a href="#cb38-16" aria-hidden="true" tabindex="-1"></a>            })</span>
+<span id="cb38-17"><a href="#cb38-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(tdf) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb38-18"><a href="#cb38-18" aria-hidden="true" tabindex="-1"></a>    tdf <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(tdf,<span class="at">.id=</span><span class="st">"threshold"</span>)</span>
+<span id="cb38-19"><a href="#cb38-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tdf)</span>
+<span id="cb38-20"><a href="#cb38-20" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb38-21"><a href="#cb38-21" aria-hidden="true" tabindex="-1"></a>samples_AMI <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_clustid, <span class="cf">function</span>(sample) {</span>
+<span id="cb38-22"><a href="#cb38-22" aria-hidden="true" tabindex="-1"></a>    sample <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(threshold) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="fu">across</span>(wgs90<span class="sc">:</span>pol, <span class="sc">~</span><span class="fu">AMI</span>(.x,wgs))) <span class="sc">%&gt;%</span></span>
+<span id="cb38-23"><a href="#cb38-23" aria-hidden="true" tabindex="-1"></a>        <span class="fu">pivot_longer</span>(<span class="at">cols=</span>wgs90<span class="sc">:</span>pol, <span class="at">names_to=</span><span class="st">"mix"</span>, <span class="at">values_to=</span><span class="st">"AMI"</span>)</span>
+<span id="cb38-24"><a href="#cb38-24" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb38-25"><a href="#cb38-25" aria-hidden="true" tabindex="-1"></a>samples_AMImean <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(samples_AMI,<span class="at">.id=</span><span class="st">"id"</span>) <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(threshold,mix) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="at">mAMI=</span><span class="fu">mean</span>(AMI))</span>
+<span id="cb38-26"><a href="#cb38-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-27"><a href="#cb38-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-28"><a href="#cb38-28" aria-hidden="true" tabindex="-1"></a><span class="co"># test4 &lt;- bind_rows(samples_clustid[[1]], samples_clustid[[2]], samples_clustid[[3]], samples_clustid[[4]], .id="id") %&gt;% group_by(threshold, id)</span></span>
+<span id="cb38-29"><a href="#cb38-29" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb38-30"><a href="#cb38-30" aria-hidden="true" tabindex="-1"></a><span class="co"># group_by(threshold) %&gt;% summarise(across(wgs90:wgs, list(wgs=~AMI(.x,wgs),wgs90=~AMI(.x,wgs90),wgs80=~AMI(.x,wgs80),</span></span>
+<span id="cb38-31"><a href="#cb38-31" aria-hidden="true" tabindex="-1"></a><span class="co">#                                                                                   wgs70=~AMI(.x,wgs70),wgs60=~AMI(.x,wgs60),wgs50=~AMI(.x,wgs50),</span></span>
+<span id="cb38-32"><a href="#cb38-32" aria-hidden="true" tabindex="-1"></a><span class="co">#                                                                                   wgs40=~AMI(.x,wgs40),wgs30=~AMI(.x,wgs30),wgs20=~AMI(.x,wgs20),</span></span>
+<span id="cb38-33"><a href="#cb38-33" aria-hidden="true" tabindex="-1"></a><span class="co">#                                                                                   wgs10=~AMI(.x,wgs10),pol=~AMI(.x,pol)))) %&gt;%</span></span>
+<span id="cb38-34"><a href="#cb38-34" aria-hidden="true" tabindex="-1"></a><span class="co">#     pivot_longer(cols=wgs90_wgs:wgs_pol,names_to="mix_mix",values_to="AMI") %&gt;%</span></span>
+<span id="cb38-35"><a href="#cb38-35" aria-hidden="true" tabindex="-1"></a><span class="co">#     separate(col="mix_mix",into=c("mix1","mix2")) -&gt; test</span></span>
+<span id="cb38-36"><a href="#cb38-36" aria-hidden="true" tabindex="-1"></a><span class="co"># test2 &lt;- unite(test, "mix11", mix1, id, remove=FALSE) %&gt;% unite("mix21", mix2, id)</span></span>
+<span id="cb38-37"><a href="#cb38-37" aria-hidden="true" tabindex="-1"></a><span class="co">#     autoplot(cmdscale(1-acast(filter(test,threshold==99),mix1~mix2,value.vaar="AMI"),eig=TRUE),label=TRUE)</span></span>
+<span id="cb38-38"><a href="#cb38-38" aria-hidden="true" tabindex="-1"></a><span class="co">#     </span></span>
+<span id="cb38-39"><a href="#cb38-39" aria-hidden="true" tabindex="-1"></a><span class="co">#     testmat &lt;- left_join(filter(samples_clustid[[1]], threshold==99), filter(samples_clustid[[2]], threshold==99), by=c("threshold","id")) %&gt;% left_join(filter(samples_clustid[[24]],threshold==99), by=c("threshold","id")) %&gt;% replace(is.na(.),0)</span></span>
+<span id="cb38-40"><a href="#cb38-40" aria-hidden="true" tabindex="-1"></a><span class="co">#     </span></span>
+<span id="cb38-41"><a href="#cb38-41" aria-hidden="true" tabindex="-1"></a><span class="co">#     testami &lt;- lapply(3:35, function(x) lapply(3:35, function(y) AMI(testmat[,x],testmat[,y])))</span></span>
+<span id="cb38-42"><a href="#cb38-42" aria-hidden="true" tabindex="-1"></a><span class="co">#     testami_mat &lt;- acast(melt(testami),L2~L1)</span></span>
+<span id="cb38-43"><a href="#cb38-43" aria-hidden="true" tabindex="-1"></a><span class="co">#     ggplot(data.frame(cmdscale(1 - testami_mat),mix=c(treenames,treenames,treenames))) + geom_point(aes(x=X1,y=X2,color=mix)) + theme_bw()</span></span>
+<span id="cb38-44"><a href="#cb38-44" aria-hidden="true" tabindex="-1"></a><span class="co">#     </span></span>
+<span id="cb38-45"><a href="#cb38-45" aria-hidden="true" tabindex="-1"></a><span class="co">#                                                                                   """</span></span>
+<span id="cb38-46"><a href="#cb38-46" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb38-47"><a href="#cb38-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-48"><a href="#cb38-48" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">bind_rows</span>(samples_AMI,<span class="at">.id=</span><span class="st">"id"</span>) <span class="sc">%&gt;%</span> <span class="fu">filter</span>(id <span class="sc">!=</span> <span class="dv">15</span>),<span class="fu">aes</span>(<span class="at">y=</span>AMI,<span class="at">x=</span>mix)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>threshold) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">"Mixture"</span>) <span class="sc">+</span></span>
+<span id="cb38-49"><a href="#cb38-49" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_bw</span>() <span class="sc">+</span></span>
+<span id="cb38-50"><a href="#cb38-50" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">axis.text.x=</span><span class="fu">element_text</span>(<span class="at">angle=</span><span class="dv">90</span>,<span class="at">vjust=</span><span class="fl">0.5</span>,<span class="at">hjust=</span><span class="dv">1</span>))</span>
+<span id="cb38-51"><a href="#cb38-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-52"><a href="#cb38-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-53"><a href="#cb38-53" aria-hidden="true" tabindex="-1"></a>samples_clustid_wgsonly <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_clustid, <span class="cf">function</span>(x) <span class="fu">filter</span>(x, wgs <span class="sc">!=</span> <span class="dv">0</span>))</span>
+<span id="cb38-54"><a href="#cb38-54" aria-hidden="true" tabindex="-1"></a>samples_AMI_wgsonly <span class="ot">&lt;-</span> <span class="fu">lapply</span>(samples_clustid_wgsonly, <span class="cf">function</span>(sample) {</span>
+<span id="cb38-55"><a href="#cb38-55" aria-hidden="true" tabindex="-1"></a>     sample <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(threshold) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="fu">across</span>(wgs90<span class="sc">:</span>pol, <span class="sc">~</span><span class="fu">AMI</span>(.x,wgs))) <span class="sc">%&gt;%</span></span>
+<span id="cb38-56"><a href="#cb38-56" aria-hidden="true" tabindex="-1"></a>         <span class="fu">pivot_longer</span>(<span class="at">cols=</span>wgs90<span class="sc">:</span>pol, <span class="at">names_to=</span><span class="st">"mix"</span>, <span class="at">values_to=</span><span class="st">"AMI"</span>)</span>
+<span id="cb38-57"><a href="#cb38-57" aria-hidden="true" tabindex="-1"></a> })</span>
+<span id="cb38-58"><a href="#cb38-58" aria-hidden="true" tabindex="-1"></a>samples_AMImean_wgsonly <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(samples_AMI_wgsonly,<span class="at">.id=</span><span class="st">"id"</span>) <span class="sc">%&gt;%</span> <span class="fu">group_by</span>(threshold,mix) <span class="sc">%&gt;%</span> <span class="fu">summarise</span>(<span class="at">mAMI=</span><span class="fu">mean</span>(AMI))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<section id="parameters-for-trees" class="level2">
+<h2 class="anchored" data-anchor-id="parameters-for-trees">Parameters for trees</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>wgsparams <span class="ot">&lt;-</span> <span class="fu">paramsdf</span>(<span class="fu">file.path</span>(PATH,<span class="st">"results/trees/HIV1_FLT_2018_genome_DNA_subtypeB.fa.iqtree"</span>))</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>folders <span class="ot">&lt;-</span> <span class="fu">list.files</span>(<span class="fu">file.path</span>(PATH,<span class="st">"results/trees/samples"</span>))</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>sampleparams <span class="ot">&lt;-</span> <span class="fu">lapply</span>(folders, <span class="cf">function</span>(x) {</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">loadparams</span>(<span class="fu">file.path</span>(PATH,<span class="st">"results/trees/samples"</span>,x))</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>sampleparams <span class="ot">&lt;-</span> <span class="fu">Filter</span>(<span class="fu">Negate</span>(is.null), sampleparams)</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>paramdf <span class="ot">&lt;-</span> <span class="fu">lapply</span>(sampleparams, <span class="cf">function</span>(x) <span class="fu">bind_rows</span>(x, <span class="at">.id=</span><span class="st">"tree"</span>)) <span class="sc">%&gt;%</span> <span class="fu">bind_rows</span>(., <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a>wgsparams<span class="sc">$</span>id <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>wgsparams<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="st">"wgs"</span></span>
+<span id="cb39-11"><a href="#cb39-11" aria-hidden="true" tabindex="-1"></a>paramdf <span class="ot">&lt;-</span> <span class="fu">rbind</span>(paramdf, wgsparams) <span class="sc">%&gt;%</span></span>
+<span id="cb39-12"><a href="#cb39-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">tree=</span><span class="fu">fct_relevel</span>(tree,<span class="st">"pol"</span>,<span class="st">"wgs10"</span>,<span class="st">"wgs20"</span>,<span class="st">"wgs30"</span>,<span class="st">"wgs40"</span>,<span class="st">"wgs50"</span>,<span class="st">"wgs60"</span>,<span class="st">"wgs70"</span>,<span class="st">"wgs80"</span>,<span class="st">"wgs90"</span>,<span class="st">"wgs"</span>))</span>
+<span id="cb39-13"><a href="#cb39-13" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(paramdf, Type<span class="sc">==</span><span class="st">"Rate parameter R"</span>), <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>Value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>Param, <span class="at">scales=</span><span class="st">"free_y"</span>) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">"Mixture"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/params-1.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(paramdf, Type<span class="sc">==</span><span class="st">"State freq"</span>), <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>Value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>Param, <span class="at">scales=</span><span class="st">"free_y"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/params-2.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(paramdf, Type<span class="sc">==</span><span class="st">"relative rate"</span>), <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>Value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>Param, <span class="at">scales=</span><span class="st">"free_y"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/params-3.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(paramdf, Type<span class="sc">==</span><span class="st">"rr proportion"</span>), <span class="fu">aes</span>(<span class="at">x=</span>tree,<span class="at">y=</span>Value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>Param, <span class="at">scales=</span><span class="st">"free_y"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/params-4.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>fpdists <span class="ot">&lt;-</span> <span class="fu">lapply</span>(fptrees, <span class="cf">function</span>(x) {</span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>    just_trees <span class="ot">&lt;-</span> <span class="fu">lapply</span>(x[[<span class="dv">1</span>]], <span class="cf">function</span>(y) y<span class="sc">@</span>phylo)[<span class="fu">c</span>(<span class="dv">11</span>,<span class="dv">1</span>,<span class="dv">2</span>,<span class="dv">3</span>,<span class="dv">4</span>,<span class="dv">5</span>,<span class="dv">6</span>,<span class="dv">7</span>,<span class="dv">8</span>,<span class="dv">9</span>,<span class="dv">10</span>)]</span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>    just_trees <span class="ot">&lt;-</span> <span class="fu">lapply</span>(just_trees, <span class="cf">function</span>(y) {</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>        y<span class="sc">$</span>node.label <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a>        <span class="fu">return</span>(y)</span>
+<span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a>        })</span>
+<span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># there is also one from 1979 in here?</span></span>
+<span id="cb43-8"><a href="#cb43-8" aria-hidden="true" tabindex="-1"></a>    <span class="co"># sapply(just_trees$wgs$tip.label, function(x) stringr::str_split(x, pattern="\\.")[[1]][3]) %&gt;% tabulate()</span></span>
+<span id="cb43-9"><a href="#cb43-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># which(sapply(just_trees$wgs$tip.label, function(x) stringr::str_split(x, pattern="\\.")[[1]][3]) == "79")</span></span>
+<span id="cb43-10"><a href="#cb43-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># B.US.79.NYC4.KJ704792 </span></span>
+<span id="cb43-11"><a href="#cb43-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">#             296 </span></span>
+<span id="cb43-12"><a href="#cb43-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">#just_trees &lt;- lapply(just_trees, function(x) ape::root(x,outgroup="B.FR.83.HXB2_LAI_IIIB_BRU.K03455", resolve.root=TRUE))</span></span>
+<span id="cb43-13"><a href="#cb43-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">#just_trees &lt;- lapply(just_trees, function(x) ape::root(x,outgroup="B.US.79.NYC4.KJ704792", resolve.root=TRUE))</span></span>
+<span id="cb43-14"><a href="#cb43-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">class</span>(just_trees) <span class="ot">&lt;-</span> <span class="st">"multiPhylo"</span></span>
+<span id="cb43-15"><a href="#cb43-15" aria-hidden="true" tabindex="-1"></a>    tree_rfdist <span class="ot">&lt;-</span> <span class="fu">dist.topo</span>(just_trees)</span>
+<span id="cb43-16"><a href="#cb43-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">#tree_geodist &lt;- dist.multiPhylo(just_trees)</span></span>
+<span id="cb43-17"><a href="#cb43-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">melt</span>(<span class="fu">as.matrix</span>(tree_rfdist), <span class="at">varnames =</span> <span class="fu">c</span>(<span class="st">"row"</span>, <span class="st">"col"</span>))</span>
+<span id="cb43-18"><a href="#cb43-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">#melt(as.matrix(tree_geodist), varnames = c("row", "col"))</span></span>
+<span id="cb43-19"><a href="#cb43-19" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb43-20"><a href="#cb43-20" aria-hidden="true" tabindex="-1"></a>df_fpdists <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(fpdists, <span class="at">.id=</span><span class="st">"id"</span>)</span>
+<span id="cb43-21"><a href="#cb43-21" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">filter</span>(df_fpdists, row<span class="sc">==</span><span class="st">"wgs"</span> <span class="sc">&amp;</span> value <span class="sc">!=</span> <span class="dv">0</span>), <span class="fu">aes</span>(<span class="at">x=</span>col, <span class="at">y=</span>value)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>() <span class="sc">+</span> <span class="fu">geom_jitter</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures_files/figure-html/rf_dist_fp-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption class="figure-caption">Sample to sample RF distances between all phylogenetic trees. Closer to yellow is farther away, and closer to green is closer.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">lapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>, <span class="cf">function</span>(x) {</span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>    st <span class="ot">&lt;-</span> sampletrees[[x]]</span>
+<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a>    st <span class="ot">&lt;-</span> <span class="fu">lapply</span>(st[[<span class="dv">1</span>]], <span class="cf">function</span>(y) y<span class="sc">@</span>phylo)</span>
+<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a>    ft <span class="ot">&lt;-</span> fptrees[[x]]</span>
+<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a>    ft <span class="ot">&lt;-</span> <span class="fu">lapply</span>(ft[[<span class="dv">1</span>]], <span class="cf">function</span>(y) y<span class="sc">@</span>phylo)</span>
+<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a>    d <span class="ot">&lt;-</span> <span class="fu">mapply</span>(dist.multiPhylo, st, ft)</span>
+<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a>})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="how-many-clusters-are-identified-in-each-mixture-compared-to-whole-genome" class="level2">
+<h2 class="anchored" data-anchor-id="how-many-clusters-are-identified-in-each-mixture-compared-to-whole-genome">How many clusters are identified in each mixture compared to whole genome?</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb45"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>threshold <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">70</span>, <span class="dv">80</span>, <span class="dv">85</span>,<span class="dv">90</span>,<span class="dv">95</span>,<span class="dv">99</span>)</span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>allclusters <span class="ot">&lt;-</span> <span class="fu">lapply</span>(threshold, <span class="cf">function</span>(y) <span class="fu">future_lapply</span>(trees, <span class="cf">function</span>(x) <span class="fu">cluster</span>(x, y, labels)))</span>
+<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(allclusters) <span class="ot">&lt;-</span> threshold</span>
+<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a><span class="co"># number of common clusters = tp</span></span>
+<span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a>sharedclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(allclusters, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">intersect</span>(x[[<span class="dv">3</span>]],y<span class="sc">$</span>wgs[[<span class="dv">3</span>]]) <span class="sc">%&gt;%</span> length))</span>
+<span id="cb45-7"><a href="#cb45-7" aria-hidden="true" tabindex="-1"></a>tp <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(sharedclust)</span>
+<span id="cb45-8"><a href="#cb45-8" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(tp) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb45-9"><a href="#cb45-9" aria-hidden="true" tabindex="-1"></a>tp<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(tp)</span>
+<span id="cb45-10"><a href="#cb45-10" aria-hidden="true" tabindex="-1"></a>tp <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(tp, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>, <span class="at">values_to=</span><span class="st">"tp"</span>)</span>
+<span id="cb45-11"><a href="#cb45-11" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total clusters</span></span>
+<span id="cb45-12"><a href="#cb45-12" aria-hidden="true" tabindex="-1"></a>totalclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(allclusters, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">length</span>(x[[<span class="dv">3</span>]])))</span>
+<span id="cb45-13"><a href="#cb45-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-14"><a href="#cb45-14" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total - common = clusters specific to given tree = fp</span></span>
+<span id="cb45-15"><a href="#cb45-15" aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(totalclust)</span>
+<span id="cb45-16"><a href="#cb45-16" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(fp) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb45-17"><a href="#cb45-17" aria-hidden="true" tabindex="-1"></a>fp<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(fp)</span>
+<span id="cb45-18"><a href="#cb45-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-19"><a href="#cb45-19" aria-hidden="true" tabindex="-1"></a><span class="co"># number of wgs - common = clusters specific to wgs = fn</span></span>
+<span id="cb45-20"><a href="#cb45-20" aria-hidden="true" tabindex="-1"></a><span class="co"># https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group</span></span>
+<span id="cb45-21"><a href="#cb45-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-22"><a href="#cb45-22" aria-hidden="true" tabindex="-1"></a><span class="co"># number of possible clusters is number of nodes in tree which here we know is 1194</span></span>
+<span id="cb45-23"><a href="#cb45-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 1194 - fn = tn</span></span>
+<span id="cb45-24"><a href="#cb45-24" aria-hidden="true" tabindex="-1"></a>cluster_compare <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(fp, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>,<span class="at">values_to=</span><span class="st">"totalclust"</span>) <span class="sc">%&gt;%</span> <span class="fu">left_join</span>(tp) <span class="sc">%&gt;%</span></span>
+<span id="cb45-25"><a href="#cb45-25" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fp=</span>totalclust<span class="sc">-</span>tp) <span class="sc">%&gt;%</span></span>
+<span id="cb45-26"><a href="#cb45-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(bootstrap) <span class="sc">%&gt;%</span></span>
+<span id="cb45-27"><a href="#cb45-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fn=</span>totalclust[tree<span class="sc">==</span><span class="st">"wgs"</span>]<span class="sc">-</span>tp, <span class="at">tn=</span><span class="dv">1194</span><span class="sc">-</span>fn, <span class="at">precision=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fp),<span class="at">recall=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fn))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Joining with `by = join_by(tree, bootstrap)`</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb47"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(cluster_compare,<span class="fu">aes</span>(<span class="at">y=</span>precision,<span class="at">x=</span>recall)) <span class="sc">+</span> <span class="fu">geom_line</span>() <span class="sc">+</span> ggrepel<span class="sc">::</span><span class="fu">geom_label_repel</span>(<span class="fu">aes</span>(<span class="at">label =</span> tree), <span class="at">max.overlaps=</span><span class="dv">20</span>) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>bootstrap) <span class="sc">+</span> <span class="fu">scale_y_log10</span>() <span class="sc">+</span> <span class="fu">scale_x_log10</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="figures_files/figure-html/wgs_clusters-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>sizeclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(allclusters, <span class="cf">function</span>(x) <span class="fu">lapply</span>(x, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y[[<span class="dv">1</span>]], length)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>threshold <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">70</span>, <span class="dv">80</span>, <span class="dv">85</span>,<span class="dv">90</span>,<span class="dv">95</span>,<span class="dv">99</span>)</span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>maskgp120_allclusters <span class="ot">&lt;-</span> <span class="fu">lapply</span>(threshold, <span class="cf">function</span>(y) <span class="fu">future_lapply</span>(maskgp120_phylos, <span class="cf">function</span>(x) <span class="fu">cluster</span>(x, y, maskgp120_labels)))</span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(allclusters) <span class="ot">&lt;-</span> threshold</span>
+<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-5"><a href="#cb49-5" aria-hidden="true" tabindex="-1"></a><span class="co"># number of common clusters = tp</span></span>
+<span id="cb49-6"><a href="#cb49-6" aria-hidden="true" tabindex="-1"></a>sharedclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(maskgp120_allclusters, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">intersect</span>(x[[<span class="dv">3</span>]],y<span class="sc">$</span>wgs[[<span class="dv">3</span>]]) <span class="sc">%&gt;%</span> length))</span>
+<span id="cb49-7"><a href="#cb49-7" aria-hidden="true" tabindex="-1"></a>tp <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(sharedclust)</span>
+<span id="cb49-8"><a href="#cb49-8" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(tp) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb49-9"><a href="#cb49-9" aria-hidden="true" tabindex="-1"></a>tp<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(tp)</span>
+<span id="cb49-10"><a href="#cb49-10" aria-hidden="true" tabindex="-1"></a>tp <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(tp, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>, <span class="at">values_to=</span><span class="st">"tp"</span>)</span>
+<span id="cb49-11"><a href="#cb49-11" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total clusters</span></span>
+<span id="cb49-12"><a href="#cb49-12" aria-hidden="true" tabindex="-1"></a>totalclust <span class="ot">&lt;-</span> <span class="fu">lapply</span>(maskgp120_allclusters, <span class="cf">function</span>(y) <span class="fu">sapply</span>(y, <span class="cf">function</span>(x) <span class="fu">length</span>(x[[<span class="dv">3</span>]])))</span>
+<span id="cb49-13"><a href="#cb49-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-14"><a href="#cb49-14" aria-hidden="true" tabindex="-1"></a><span class="co"># number of total - common = clusters specific to given tree = fp</span></span>
+<span id="cb49-15"><a href="#cb49-15" aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(totalclust)</span>
+<span id="cb49-16"><a href="#cb49-16" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(fp) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>)</span>
+<span id="cb49-17"><a href="#cb49-17" aria-hidden="true" tabindex="-1"></a>fp<span class="sc">$</span>tree <span class="ot">&lt;-</span> <span class="fu">rownames</span>(fp)</span>
+<span id="cb49-18"><a href="#cb49-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-19"><a href="#cb49-19" aria-hidden="true" tabindex="-1"></a><span class="co"># number of wgs - common = clusters specific to wgs = fn</span></span>
+<span id="cb49-20"><a href="#cb49-20" aria-hidden="true" tabindex="-1"></a><span class="co"># https://stackoverflow.com/questions/50957998/mutate-inside-group-by-based-on-particular-row-inside-group</span></span>
+<span id="cb49-21"><a href="#cb49-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-22"><a href="#cb49-22" aria-hidden="true" tabindex="-1"></a><span class="co"># number of possible clusters is number of nodes in tree which here we know is 1194</span></span>
+<span id="cb49-23"><a href="#cb49-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 1194 - fn = tn</span></span>
+<span id="cb49-24"><a href="#cb49-24" aria-hidden="true" tabindex="-1"></a>cluster_compare <span class="ot">&lt;-</span> <span class="fu">pivot_longer</span>(fp, <span class="at">cols=</span><span class="fu">c</span>(<span class="st">"70"</span>,<span class="st">"80"</span>,<span class="st">"85"</span>,<span class="st">"90"</span>,<span class="st">"95"</span>,<span class="st">"99"</span>), <span class="at">names_to=</span><span class="st">"bootstrap"</span>,<span class="at">values_to=</span><span class="st">"totalclust"</span>) <span class="sc">%&gt;%</span> <span class="fu">left_join</span>(tp) <span class="sc">%&gt;%</span></span>
+<span id="cb49-25"><a href="#cb49-25" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fp=</span>totalclust<span class="sc">-</span>tp) <span class="sc">%&gt;%</span></span>
+<span id="cb49-26"><a href="#cb49-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(bootstrap) <span class="sc">%&gt;%</span></span>
+<span id="cb49-27"><a href="#cb49-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">fn=</span>totalclust[tree<span class="sc">==</span><span class="st">"wgs"</span>]<span class="sc">-</span>tp, <span class="at">tn=</span><span class="dv">1194</span><span class="sc">-</span>fn, <span class="at">precision=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fp),<span class="at">recall=</span>tp<span class="sc">/</span>(tp<span class="sc">+</span>fn))</span>
+<span id="cb49-28"><a href="#cb49-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-29"><a href="#cb49-29" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(cluster_compare,<span class="fu">aes</span>(<span class="at">y=</span>precision,<span class="at">x=</span>recall)) <span class="sc">+</span> <span class="fu">geom_line</span>() <span class="sc">+</span> ggrepel<span class="sc">::</span><span class="fu">geom_label_repel</span>(<span class="fu">aes</span>(<span class="at">label =</span> tree), <span class="at">max.overlaps=</span><span class="dv">20</span>) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>bootstrap) <span class="sc">+</span> <span class="fu">scale_y_log10</span>() <span class="sc">+</span> <span class="fu">scale_x_log10</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>
