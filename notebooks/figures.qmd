@@ -57,6 +57,8 @@ source(file.path(RPATH,"cluster.R"))
 source(file.path(RPATH,"loadparams.R"))
 source(file.path(RPATH, "loadtree.R"))
 source(file.path(RPATH, "max_gendist.R"))
+
+samples_allclusters <- readRDS(file.path(RDATA,"samples_allclusters.rds"))
 ```
 
 ```{r loadtrees, include=FALSE}
@@ -256,7 +258,7 @@ ggplot(data.frame(dim=1:3,txc=txc)) + geom_point(aes(x=dim,y=txc)) + theme_bw() 
 
 # Clustering results
 
-```{r samples_allclusters, include=FALSE}
+```{r samples_allclusters, include=FALSE, eval=FALSE}
 # samples_allclusters <- lapply(sampletrees, function(z) {
 #     phylos <- z[[1]]
 #     labels <- z[[2]]
@@ -265,7 +267,6 @@ ggplot(data.frame(dim=1:3,txc=txc)) + geom_point(aes(x=dim,y=txc)) + theme_bw() 
 #     allclusters
 #     })
 # saveRDS(samples_allclusters, file=file.path(RDATA,"samples_allclusters.rds"))
-samples_allclusters <- readRDS(file.path(RDATA,"samples_allclusters.rds"))
 ```
 
 ## Figure 3: Clustering changes with mixtures and bootstraps
@@ -658,4 +659,126 @@ cluster_compare <- pivot_longer(fp, cols=c("70","80","85","90","95","99"), names
     mutate(fn=totalclust[tree=="wgs"]-tp, tn=1194-fn, precision=tp/(tp+fp),recall=tp/(tp+fn))
 
 ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
+```
+
+## hypermut
+
+```{r}
+hypermut <- read_csv("/Users/aguang/CORE/kantorlab/hiv_wide/results/hypermut/summary.csv")
+sum(hypermut$fisher_p < .05)/nrow(hypermut)
+```
+
+## Relaxed clustering criteria
+
+```{r}
+wgs_clusters <- tibble(wgs_seq_id = samples_allclusters[[1]]$`70`$wgs[[2]])
+test_clusters <- tibble(test_seq_id = samples_allclusters[[1]]$`70`$wgs10[[2]])
+
+wgs_clust_70 <- filter(wgs_clusters, threshold=="70") %>% ungroup() %>% select(-threshold)
+test_clust_70 <- filter(test_clusters, threshold=="70") %>% ungroup() %>% select(-threshold)
+
+wgs_clust_95 <- filter(wgs_clusters, threshold=="95") %>% ungroup() %>% select(-threshold)
+test_clust_95 <- filter(test_clusters, threshold=="95") %>% ungroup() %>% select(-threshold)
+
+# lapply over each sample
+
+cluster_comparison_results <- samples_clustid[[1]] %>%
+  # group by threshold
+  group_by(threshold) %>%
+  nest() %>%
+  # For each threshold, run the comparison
+  mutate(
+          # for each non-wgs100 tree:
+        # for each cluster, find cluster in wgs100 tree that it shares the most members with
+        # compute overlap coefficient
+        # apply thresholds of 0.5 and 0.67
+    comparison = map(data, ~{
+      # Separate out wgs and mix clusters
+        wgs_clusters <- .x %>%
+            select(id, wgs) %>%
+            group_by(wgs) %>%
+            summarise(
+                wgs_seqs = list(id),
+                wgs_size = n()) %>%
+            dplyr::rename(wgs_clust_id=wgs)
+
+        test_clusters <- .x %>%
+            select(-wgs) %>%
+            pivot_longer(wgs90:pol, names_to="mix", values_to="test_clust_id") %>%
+            group_by(mix, test_clust_id) %>%
+            summarise(
+                test_seqs = list(id),
+                test_size = n()
+            )
+
+      tidyr::crossing(wgs_clusters, test_clusters) %>%
+        # compute intersection size
+        mutate(intersection_size = map2_int(wgs_seqs, test_seqs, ~length(intersect(.x, .y)))) %>%
+        # for each test clust, find wgs clust with biggest intersection
+        group_by(mix, test_clust_id) %>%
+        filter(intersection_size==max(intersection_size)) %>%
+        # handle ties
+        slice_min(order_by = wgs_size, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        # calculate overlap metrics for "best-match" pairs
+    mutate(
+        union_size = test_size + wgs_size - intersection_size,
+        jaccard_index = intersection_size / union_size,
+        overlap_coefficient = intersection_size / pmin(test_size, wgs_size),
+        prop_overlap_test = intersection_size / test_size,
+        prop_overlap_ref = intersection_size / wgs_size
+    ) %>%
+    # Reorder for clarity
+    select(
+        mix, test_clust_id, wgs_clust_id, test_size, wgs_size,
+        intersection_size, jaccard_index, overlap_coefficient,
+        prop_overlap_test, prop_overlap_ref
+    )
+        })
+    ) %>%
+    # Unnest the results to a single flat table
+    select(threshold, comparison) %>%
+    unnest(cols = c(comparison))
+```
+
+```{r}
+# 4. --- SUMMARIZE & PLOT: RECOVERY RATES (using Overlap Coefficient) ---
+# -----------------------------------------------------------------------
+
+# Define the thresholds for congruence
+thresholds <- c(0.5, 2/3)
+names(thresholds) <- c(">50%", ">2/3")
+
+# Get the total number of reference ('wgs') clusters for each distance threshold
+total_reference_clusters <- samples_clustid[[1]] %>% select(threshold, id, wgs) %>%
+  group_by(threshold) %>%
+  summarise(total_ref_clusters = n_distinct(wgs), .groups = "drop")
+
+# Calculate the number and proportion of reference clusters recovered
+recovery_summary <- imap_dfr(~{
+    cluster_comparison_results %>%
+      # *** NEW METRIC ***: Filter using overlap_coefficient
+      filter(overlap_coefficient > .x) %>%
+      group_by(dist_threshold) %>%
+      # Count how many *unique* reference clusters were recovered
+      summarise(recovered_clusters = n_distinct(ref_cluster_id), .groups = "drop") %>%
+      mutate(threshold_label = .y)
+    },
+    .id = "threshold_value", thresholds
+  ) %>%
+  # Join with totals to calculate proportion
+  left_join(total_reference_clusters, by = "dist_threshold") %>%
+  mutate(prop_recovered = recovered_clusters / total_ref_clusters)
+
+comparisons %>% group_by(mix) %>% filter(overlap_coefficient >= .5) %>% summarise(recovered_clusters = n_distinct(wgs_clust_id))
+
+comparisons %>% group_by(mix) %>% filter(overlap_coefficient == .5) %>% summarise(recovered_clusters = n_distinct(wgs_clust_id))
+
+ggplot(comparisons, aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() + geom_jitter()
+
+ggplot(filter(comparisons, overlap_coefficient > .5), aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() + geom_jitter()
+
+filter(cluster_comparison_results, threshold=="95") %>% group_by(mix) %>% filter(overlap_coefficient >=0.5) %>% summarise(recovered_clusters = n_distinct(wgs_clust_id))
+
+ggplot(filter(cluster_comparison_results, overlap_coefficient > 0.5), aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() + geom_jitter() + facet_wrap(~threshold)
 ```

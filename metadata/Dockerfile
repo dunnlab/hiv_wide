@@ -1,4 +1,4 @@
-FROM rocker/tidyverse:4.1.2
+FROM rocker/tidyverse:4.4
 
 USER root
 
@@ -11,6 +11,7 @@ RUN apt-get update && \
         libxt-dev \
         openjdk-11-jdk \
         ca-certificates-java \
+        iqtree \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64/
@@ -24,3 +25,6 @@ RUN R -e "install.packages('devtools', dependencies=TRUE, repos='http://cran.rst
 RUN R -e "install.packages(c('tidytree','ape','parallel'), repos='http://cran.rstudio.com')"
 
 RUN R -e "BiocManager::install(c('treeio', 'ggtree', 'ggtreeExtra'))"
+
+#symlink
+RUN ln -s /usr/lib/rstudio-server/bin/rsession /usr/local/bin/rsession
