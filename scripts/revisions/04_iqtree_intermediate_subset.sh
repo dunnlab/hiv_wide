@@ -18,7 +18,7 @@ cd $ALIGNMENTS
 seeds=(*/)
 seed=${seeds[$(( $SLURM_ARRAY_TASK_ID % 100 ))]%/} # values 0-99 for indexing
 masks=( 001 002 003 004 005 006 007 008 009 000 )
-mask=${masks[$(( $SLURM_ARRAY_TASK_ID % 10 ))]} # values 0-9 for indexing
+mask=${masks[$(( ($SLURM_ARRAY_TASK_ID/100) % 10 ))]} # values 0-9 for indexing
 
 fa=brazil18858.padded_${seed}_mask${mask}.fa
 
@@ -31,4 +31,4 @@ if [ "$mask" = "000" ]; then
 fi
 
 mkdir -p ${WORKDIR}/results/subset/trees/${seed}
-singularity exec ${SINGULARITY_IMG} iqtree2 -nt 8 -mem 16G -seed ${seed} -s ${ALIGNMENTS}/${seed}/${fa} -m GTR+F+I+G4 -alrt 1000 -bb 1000 -wbt -wbtl -pre ${WORKDIR}/results/trees/${seed}/${fa}
+singularity exec ${SINGULARITY_IMG} iqtree2 -nt 8 -mem 16G -seed ${seed} -s ${ALIGNMENTS}/${seed}/${fa} -m GTR+F+I+G4 -alrt 1000 -bb 1000 -wbt -wbtl -pre ${WORKDIR}/results/subset/trees/${seed}/${fa}

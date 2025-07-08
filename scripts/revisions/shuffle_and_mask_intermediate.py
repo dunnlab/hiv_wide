@@ -64,7 +64,7 @@ def mask_write(seed, orig_matrix, out_prefix):
     shuff_ids_list = [x for x in orig_matrix]
     random.Random(seed).shuffle(shuff_ids_list)
     for pct_to_mask in range(1, 10): # 1 through 9 will equal 99,98,97,...91
-        n_to_mask = round(len(shuff_ids_list) * pct_to_mask / 10)
+        n_to_mask = round(len(shuff_ids_list) * pct_to_mask / 100)
         with open(f"{out_prefix}_mask{pct_to_mask*1:0>3}.fa", "w") as masked_matrix:
             SeqIO.write(
                 generate_sequences(

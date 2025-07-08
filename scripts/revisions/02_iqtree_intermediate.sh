@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH -t 4-0 --mem=16G -c8
-#SBATCH --array=12-999
+#SBATCH --array=0-999
+#SBATCH -A cbc-condo
 #SBATCH -J iqtree-intermediate
 #SBATCH -e /gpfs/data/cbc/aguang/hiv_wide/logs/iqtree-intermediate/iqtree-intermediate-%A-%a.err
 #SBATCH -o /gpfs/data/cbc/aguang/hiv_wide/logs/iqtree-intermediate/iqtree-intermediate-%A-%a.out
@@ -10,7 +11,6 @@
 export SINGULARITY_BINDPATH="/gpfs/data/cbc/aguang/hiv_wide"
 
 WORKDIR=/gpfs/data/cbc/aguang/hiv_wide
-#SINGULARITY_IMG=${WORKDIR}/metadata/rkantor_hiv.simg
 SINGULARITY_IMG=${WORKDIR}/metadata/rkantor_hiv_06132025.sif
 ALIGNMENTS=${WORKDIR}/results/alignments
 
@@ -18,7 +18,7 @@ cd $ALIGNMENTS
 seeds=(*/)
 seed=${seeds[$(( $SLURM_ARRAY_TASK_ID % 100 ))]%/} # values 0-99 for indexing
 masks=( 001 002 003 004 005 006 007 008 009 000 )
-mask=${masks[$(( $SLURM_ARRAY_TASK_ID % 10 ))]} # values 0-9 for indexing
+mask=${masks[$(( ($SLURM_ARRAY_TASK_ID/100) % 10 ))]} # values 0-9 for indexing
 
 fa=HIV1_FLT_2018_genome_DNA_subtypeB_${seed}_mask${mask}.fa
 
