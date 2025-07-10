@@ -8,7 +8,7 @@ Source data can be downloaded from the [HIV Sequence DB](https://www.hiv.lanl.go
 
 First-stage intermediate data, i.e. masked alignments, phylogenetic trees, are available by request.
 
-Intermediate rds data for reproducing figures is directly in this repository.
+Intermediate rds data for reproducing figures is directly in this repository. Basic information about sequences, such as proviral DNA vs RNA proportion, is also available directly.
 
 ## To Reproduce
 

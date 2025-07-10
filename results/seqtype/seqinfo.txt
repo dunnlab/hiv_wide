@@ -1,0 +1,13 @@
+--- HIV Sequence Data Analysis ---
+
+Total sequences analyzed: 2596
+
+[Molecule Type Breakdown]
+Proviral DNA sequences: 1466 (56.47%)
+Viral RNA sequences:    1130 (43.53%)
+
+[Publication Analysis]
+Publication ID with the most sequences: '18858'
+Number of sequences from this publication: 115
+
+----------------------------------
