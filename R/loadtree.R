@@ -2,7 +2,7 @@
 #'
 #' @param treepath Path to the tree files
 loadtree <- function(treepath, names, masks, wgs=NULL) {
-    treefiles <- list.files(treepath,".fa.treefile",full.names=TRUE)
+    treefiles <- list.files(treepath,"(mask000|mask001|mask005|mask010|mask020|mask030|mask040|mask050|mask060|mask070|mask080|mask090|mask100).fa.treefile",full.names=TRUE)
     trees <- lapply(treefiles, function(x)
         tryCatch(read.iqtree(x), error=function(e) NULL))
     if(!is.null(wgs)) {

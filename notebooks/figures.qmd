@@ -16,7 +16,7 @@ execute:
     cache: true
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warnings=FALSE}
 library(treeio)
 library(tidytree)
 library(ggtree)
@@ -62,7 +62,7 @@ samples_allclusters <- readRDS(file.path(RDATA,"samples_allclusters.rds"))
 numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100)
 ```
 
-```{r loadtrees, include=FALSE}
+```{r loadtrees, include=FALSE, warnings=FALSE}
 treefiles <- list.files(file.path(PATH,"results/trees"),".fa.treefile",full.names=TRUE)
 trees <- lapply(treefiles, read.iqtree)
 names(trees) <- c("wgs90", "wgs80", "wgs70", "wgs60", "wgs50", "wgs40", "wgs30", "wgs20", "wgs10", "pol", "wgs")
@@ -88,18 +88,35 @@ treenames <- c("wgs99","wgs98","wgs97","wgs96","wgs95","wgs94","wgs93","wgs92","
 masks <- c("mask001","mask002","mask003","mask004","mask005","mask006","mask007","mask008","mask009",
     "mask010","mask020","mask030","mask040","mask050","mask060","mask070","mask080","mask090",
     "mask100","mask000","subtypeB.fa.treefile")
-sampletrees <- future_lapply(folders, function(x) {
+
+sampletrees <- mclapply(folders, function(x) {
     #print(paste("folder:",x))
     loadtree(x,treenames,masks)
-})
+}, mc.cores=detectCores())
 sampletrees <- Filter(Negate(is.null), sampletrees)
 
 # fixedparamtrees
 fpfolders <- list.files(file.path(PATH,"results/trees/fixedparams"), full.names=TRUE)[1:50]
-fptrees <- future_lapply(fpfolders, function(x) {
+fptrees <- mclapply(fpfolders, function(x) {
     loadtree(x, treenames, masks, trees$wgs)
-})
+}, mc.cores=detectCores())
 fptrees <- Filter(Negate(is.null), fptrees)
+```
+
+```{r subset, include=FALSE, warnings=FALSE}
+# basically need to rerun everything...
+substudy_folders <- list.files(file.path(PATH,"results/substudy/trees"), full.names=TRUE)[1:30]
+treenames <- c("wgs99","wgs98","wgs97","wgs96","wgs95","wgs94","wgs93","wgs92","wgs91",
+               "wgs90","wgs80","wgs70","wgs60","wgs50","wgs40","wgs30","wgs20","wgs10",
+               "pol","wgs100","wgs100_og") # maybe we want to filter out the wgs copies?
+masks <- c("mask001","mask002","mask003","mask004","mask005","mask006","mask007","mask008","mask009",
+    "mask010","mask020","mask030","mask040","mask050","mask060","mask070","mask080","mask090",
+    "mask100","mask000","subtypeB.fa.treefile")
+substudy_trees <- mclapply(substudy_folders, function(x) {
+    #print(paste("folder:",x))
+    loadtree(x,treenames,masks)
+}, mc.cores=detectCores())
+substudy_trees <- Filter(Negate(is.null), substudy_trees)
 ```
 
 # Overview
@@ -144,7 +161,7 @@ bootstrap_helper %<-% function(bipart, t) {
 #bootstrap %<-% mclapply(labels, function(x) bootstrap_helper(x, 1))
 
 bootstrap <- function(t) {
-    future_lapply(labels, function(x) bootstrap_helper(x, t))
+    mclapply(labels, function(x) bootstrap_helper(x, t), mc.cores=detectCores())
 }
 
 all_tree_bootstraps <- lapply(1:length(trees), bootstrap)
@@ -181,7 +198,8 @@ We keep the labels separate from the dataframe for now because the names are ext
 
 This was made in Adobe Illustrator.
 
-# Figure 2: How similar are the trees?
+
+# Figure 2 and 3: How similar are the trees?
 
 ```{r otherattempts, echo=FALSE, eval=FALSE}
 #library(phangorn)
@@ -198,8 +216,9 @@ This was made in Adobe Illustrator.
 # actually I have an email from Emmanuel Paradis about it but I never implemented the fix
 ```
 
+## Figure 2: Full dataset RF distance
 
-```{r fig2_rfdist, fig.cap="RF distances between all phylogenetic tree mixtures and the wgs tree. Closer to 0 on the y-axis is closer to the wgs tree, further is further away.", warning=FALSE}
+```{r fig2_rfdist, fig.cap="Normalized RF distances between all phylogenetic tree mixtures and the wgs tree. Closer to 0 on the y-axis is closer to the wgs tree, closer to 1 is further away. A value of 1 represents the maximal possible distance between a given tree and the wgs tree.", warning=FALSE}
 dists <- lapply(sampletrees, function(x) {
     just_trees <- lapply(x[[1]], function(y) y@phylo)#[c(11,1,2,3,4,5,6,7,8,9,10)]
     class(just_trees) <- "multiPhylo"
@@ -210,13 +229,23 @@ dists <- lapply(sampletrees, function(x) {
         melt(as.matrix(tree_rfdist), varnames = c("row", "col"))
     } else { return(NULL) }
 })
+# max is 2n-6 = 1196*2-6=2386
+# min-max normalization
 dists <- Filter(Negate(is.null), dists) # filter out nulls
-df_dists <- bind_rows(dists, .id="id")
-rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
+df_dists <- bind_rows(dists, .id="id") %>% filter(value != 0)
+df_dists$rf_mm <- scale(df_dists$value, center = min(df_dists$value), scale = 2386 - min(df_dists$value))
+#df_dists_filtered <- group_by(df_dists, row, col) %>% dplyr::mutate(mval=min(rf_mm), outliera=rf_mm > mval+.2, outlierb=rf_mm) %>% filter(outlier==FALSE)
+# computing mean from wgs100 vs wgs
+# filter(df_dists, row=="wgs100_og",col=="wgs100")$value %>% mean()
+#rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
 df_dists$colval <- rename_df$numval[match(df_dists$col,rename_df$treenames)]
 # df1$R2 <- df2$R2[ match(df1$R1, df2$R1) ]
-#tiff(filename=file.path(PATH,"figures/fig1.tif"),res=300,width=1600,height=1200)
-ggplot(filter(df_dists, row=="wgs100_og" & value != 0), aes(x=colval, y=value)) + stat_summary(fun.data = mean_se, geom = "errorbar") + geom_smooth() + geom_jitter(aes(alpha=0.5),size=0.1) + xlab("Mixture") + ylab("Robinson-Foulds Distance") + theme_bw() + theme(legend.position="none")
+#tiff(filename=file.path(PATH,"figures/revision/fig2.tif"),res=300,width=1600,height=1200)
+ggplot(filter(df_dists, row=="wgs100" & value != 0 & col != "wgs100_og"), aes(x=colval, y=rf_mm)) + geom_boxplot(aes(group=colval)) + stat_summary(fun.y=median,geom="line",aes(group=1)) + xlab("Mixture") + ylab("Normalized Robinson-Foulds Distance") + theme_bw() + theme(legend.position="none") + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
 #dev.off()
 ```
 
@@ -231,33 +260,72 @@ t.test(wgs50_dist)
 t.test(wgs50_dist, pol_dist, paired=TRUE, alternative="less")
 ```
 
-# Figure 3: PCoA of tree distances
+## Figure 3: Subset dataset RF distance
 
-```{r fig3_pcoa}
-# TODO: rerun this once we have real intermediate trees
-#samplephylos <- lapply(sample.int(length(sampletrees), 20), function(x) lapply(sampletrees[[x]][[1]], as.phylo)) %>% purrr::flatten()
+```{r subset_dists, fig.cap="Normalized RF distances for subset data. Decrease starts at 40 instead."}
+substudy_dists <- lapply(substudy_trees, function(x) {
+    just_trees <- lapply(x[[1]], function(y) y@phylo)#[c(11,1,2,3,4,5,6,7,8,9,10)]
+    class(just_trees) <- "multiPhylo"
+    if(length(just_trees) > 1) {
+        tree_rfdist <- dist.topo(just_trees)
+        melt(as.matrix(tree_rfdist), varnames = c("row", "col"))
+    } else { return(NULL) }
+})
+# max is 2n-6 = 116*2-6 = 226
+# min-max normalization
+substudy_dists <- Filter(Negate(is.null), substudy_dists) # filter out nulls
+substudy_df_dists <- bind_rows(substudy_dists, .id="id") %>% filter(value != 0)
+substudy_df_dists$rf_mm <- scale(substudy_df_dists$value, center = min(substudy_df_dists$value), scale = 226 - min(substudy_df_dists$value))
+# computing mean from wgs100 vs wgs
+rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
+substudy_df_dists$colval <- rename_df$numval[match(substudy_df_dists$col,rename_df$treenames)]
+#tiff(filename=file.path(PATH,"figures/revision/fig3.tif"),res=300,width=1600,height=1200)
+ggplot(filter(substudy_df_dists, row=="wgs100" & value != 0 & col != "wgs100_og"), aes(x=colval, y=rf_mm)) + geom_boxplot(aes(group=colval)) + stat_summary(fun.y=median,geom="line",aes(group=1)) + xlab("Mixture") + ylab("Normalized Robinson-Foulds Distance") + theme_bw() + theme(legend.position="none") + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#dev.off()
+
+wgs50_dist <- filter(substudy_df_dists, row=="wgs100" & col=="wgs50")$value
+pol_dist <- filter(substudy_df_dists, row=="wgs100" & col=="pol")$value
+wgs40_dist <- filter(substudy_df_dists, row=="wgs100" & col=="wgs40")$value
+wgs30_dist <- filter(substudy_df_dists, row=="wgs100" & col=="wgs30")$value
+t.test(wgs40_dist, pol_dist, paired=TRUE, alternative="less")
+```
+
+# Figure 4 and 5: PCoA of tree distances
+
+```{r fig4_pcoa}
+#samplephylos <- lapply(sample.int(length(sampletrees), 10), function(x) lapply(sampletrees[[x]][[1]], as.phylo)) %>% purrr::flatten()
 #distances <- ClusteringInfoDistance(samplephylos)
 #distances_normalized <- ClusteringInfoDistance(samplephylos, normalize=TRUE)
-#write_rds(file=file.path(RDATA,"clustering_sample_distances.rds"),distances)
+#write_rds(file=file.path(RDATA,"revision_clustering_sample_distances.rds"),distances)
 #test_distances <- distances
 #mat_dist <- as.matrix(test_distances)
-#mat_dist <- mat_dist[rownames(mat_dist)!="wgs100_og",colnames(mat_dist)!="wgs100_og"]
-distances <- read_rds(file=file.path(RDATA, "clustering_sample_distances.rds"))
+#mat_dist <- mat_dist[!(rownames(mat_dist) %in% c("wgs100_og","wgs91","wgs92","wgs93", "wgs99")),!(colnames(mat_dist) %in% c("wgs100_og","wgs91","wgs92","wgs93","wgs99"))]
+#lapply(0:9, function(x) {
+#    m <- as.matrix(distances)[(1+x*13):((x+1)*13),(1+x*13):((x+1)*13)] %>% as.data.frame()
+#    m$row <- rownames(m)
+#    m <- m %>% pivot_longer(wgs100:pol, names_to="col")
+#    return(m)
+#})
 
-test_dist <- as.matrix(distances)[-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209),-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209)]
-pcoa <- cmdscale(test_dist, eig=TRUE, k=12)
+#test_dist <- as.matrix(distances)[-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209),-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209)]
+pcoa <- cmdscale(as.matrix(distances), eig=TRUE, k=12)
 mapping <- pcoa$points[,1:2]
 #mapping <- pcoa$points[,2:3]
 mix <- rownames(mapping)
 mapping <- data.frame(mapping, Mixture=mix)
+levels(mapping$Mixture) <- c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100")
 
-tiff(filename=file.path(PATH,"figures/fig3.tif"),res=300,width=1600,height=1600)
-ggplot(mapping) + geom_point(aes(x=X1, y=X2, color=Mixture)) + theme_bw() + coord_fixed(xlim=c(-60,60),ylim=c(-60,60)) +
-    labs(color="Mixture") + xlab("X (8.09% Percent Variance)") + ylab("Y (2.59% Percent Variance)")
-dev.off()
+#tiff(filename=file.path(PATH,"figures/revision/fig4.tif"),res=300,width=1600,height=1600)
+ggplot(mapping) + geom_point(aes(x=X1, y=X2, color=Mixture)) + theme_bw() + coord_fixed(xlim=c(-50,50),ylim=c(-50,50)) +
+    labs(color="Mixture") + xlab("X (10.98% Percent Variance)") + ylab("Y (3.25% Percent Variance)")
+#dev.off()
 ```
 
-Figure \@ref{fig:fig3_pcoa}. To get the percent variance, we took the eigenvalues of the `pcoa` object and divided the first 2 by the total sum:
+Figure \@ref{fig:fig4_pcoa}. To get the percent variance, we took the eigenvalues of the `pcoa` object and divided the first 2 by the total sum:
 
  * `pcoa$eig[1]/sum(pcoa$eig)`: `r pcoa$eig[1]/sum(pcoa$eig)`
  * `pcoa$eig[2]/sum(pcoa$eig)`: `r pcoa$eig[2]/sum(pcoa$eig)`
@@ -282,35 +350,77 @@ txc <- vapply(seq_len(ncol(tsne_out$Y)), function(k) {
 ggplot(data.frame(dim=1:3,txc=txc)) + geom_point(aes(x=dim,y=txc)) + theme_bw() + geom_hline(yintercept=0.9, linetype=2)
 ```
 
+```{r fig5_pcoa_subset}
+substudyphylos <- lapply(sample.int(length(substudy_trees), 10), function(x) lapply(substudy_trees[[x]][[1]], as.phylo)) %>% purrr::flatten()
+distances <- ClusteringInfoDistance(substudyphylos)
+distances_normalized <- ClusteringInfoDistance(substudyphylos, normalize=TRUE)
+write_rds(file=file.path(RDATA,"revision_clustering_substudy_distances.rds"),distances)
+test_distances <- distances
+mat_dist <- as.matrix(test_distances)
+mat_dist <- mat_dist[!(rownames(mat_dist) %in% c("wgs100_og","wgs91","wgs92","wgs93", "wgs99")),!(colnames(mat_dist) %in% c("wgs100_og","wgs91","wgs92","wgs93","wgs99"))]
+distances <- read_rds(file=file.path(RDATA, "revision_clustering_substudy_distances.rds"))
+
+#test_dist <- as.matrix(distances)[-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209),-c(11,22,33,44,55,66,77,88,99,110,121,132,143,154,165,176,187,198,209)]
+pcoa <- cmdscale(as.matrix(distances), eig=TRUE, k=12)
+mapping <- pcoa$points[,1:2]
+#mapping <- pcoa$points[,2:3]
+mix <- rownames(mapping)
+mapping <- data.frame(mapping, Mixture=mix)
+levels(mapping$Mixture) <- c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100")
+
+#tiff(filename=file.path(PATH,"figures/revision/fig5.tif"),res=300,width=1600,height=1600)
+ggplot(mapping) + geom_point(aes(x=X1, y=X2, color=Mixture)) + theme_bw() + coord_fixed(xlim=c(-25,25),ylim=c(-25,25)) +
+    labs(color="Mixture") + xlab("X (24.4% Percent Variance)") + ylab("Y (3.63% Percent Variance)")
+#dev.off()
+```
+
+For Figure 5 percent variance:
+
+ * `pcoa$eig[1]/sum(pcoa$eig)`: `r pcoa$eig[1]/sum(pcoa$eig)`
+ * `pcoa$eig[2]/sum(pcoa$eig)`: `r pcoa$eig[2]/sum(pcoa$eig)`
+
 # Clustering results
 
 ```{r samples_allclusters, include=FALSE, eval=FALSE}
-# samples_allclusters <- lapply(sampletrees, function(z) {
-#     phylos <- z[[1]]
-#     labels <- z[[2]]
-#     allclusters <- lapply(threshold, function(y) future_lapply(phylos, function(x) cluster(x, y, labels)))
-#     names(allclusters) <- threshold
-#     allclusters
-#     })
-# saveRDS(samples_allclusters, file=file.path(RDATA,"samples_allclusters.rds"))
+samples_allclusters <- lapply(sampletrees, function(z) {
+    phylos <- z[[1]]
+    labels <- z[[2]]
+    allclusters <- lapply(threshold, function(y) mclapply(phylos, function(x) cluster(x, y, labels), mc.cores=detectCores()))
+    names(allclusters) <- threshold
+    allclusters
+    })
+#saveRDS(samples_allclusters, file=file.path(RDATA,"samples_allclusters.rds"))
+saveRDS(samples_allclusters, file=file.path(RDATA,"revision_samples_allclusters.rds"))
 ```
 
-## Figure 4: Clustering changes with mixtures and bootstraps
+```{r substudy_allclusters, include=FALSE, eval=FALSE}
+substudy_allclusters <- lapply(substudy_trees, function(z) {
+    phylos <- z[[1]]
+    labels <- z[[2]]
+    allclusters <- lapply(threshold, function(y) mclapply(phylos, function(x) cluster(x, y, labels), mc.cores=detectCores()))
+    names(allclusters) <- threshold
+    allclusters
+    })
+saveRDS(substudy_allclusters, file=file.path(RDATA,"substudy_allclusters.rds"))
+```
 
-```{r clustermetrics}
+## Figure 6 and 7: Clustering changes with mixtures and bootstraps
+
+```{r clustermetrics, include=FALSE}
 # number of total clusters
-samples_totalclust <- lapply(samples_allclusters, function(threshold) {
+samples_totalclust <- mclapply(samples_allclusters, function(threshold) {
     tcdf <- sapply(threshold, function(y) sapply(y, function(x) length(x[[3]]))) %>%
         data.frame()
     names(tcdf) <- c("70","80","85","90","95","99")
     tcdf$tree <- rownames(tcdf)
     tcdf <- pivot_longer(tcdf, cols=c("70","80","85","90","95","99"), names_to="bootstrap",values_to="totalclust")
     return(tcdf)
-})
+}, mc.cores=detectCores())
 samples_totalclust <- bind_rows(samples_totalclust, .id="id")
 samples_totalclust$tree[samples_totalclust$tree=="wgs"] <- "wgs100"
-samples_totalclust$tree <- factor(samples_totalclust$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"))
-samples_totalclust$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,100)[match(samples_totalclust$tree, treenames)]
+samples_totalclust$tree <- factor(samples_totalclust$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"))
+matchnames <- c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100")
+samples_totalclust$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,95,99,100)[match(samples_totalclust$tree, matchnames)]
 
 # size of clusters
 samples_clustsize <- lapply(samples_allclusters, function(sample) {
@@ -325,9 +435,43 @@ samples_clustsize <- lapply(samples_allclusters, function(sample) {
 })
 samples_clustsize <- bind_rows(samples_clustsize, .id="id")
 samples_clustsize$tree[samples_clustsize$tree=="wgs"] <- "wgs100"
-samples_clustsize$tree <- factor(samples_clustsize$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"))
+samples_clustsize$tree <- factor(samples_clustsize$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"))
 colnames(samples_clustsize) <- c("id", "bootstrap", "tree", "size")
-samples_clustsize$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,100)[match(samples_clustsize$tree, treenames)]
+samples_clustsize$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,95,99,100)[match(samples_clustsize$tree, matchnames)]
+```
+
+```{r substudy_clustermetrics, include=FALSE}
+# number of total clusters
+substudy_totalclust <- mclapply(substudy_allclusters, function(threshold) {
+    tcdf <- sapply(threshold, function(y) sapply(y, function(x) length(x[[3]]))) %>%
+        data.frame()
+    names(tcdf) <- c("70","80","85","90","95","99")
+    tcdf$tree <- rownames(tcdf)
+    tcdf <- pivot_longer(tcdf, cols=c("70","80","85","90","95","99"), names_to="bootstrap",values_to="totalclust")
+    return(tcdf)
+}, mc.cores=detectCores())
+substudy_totalclust <- bind_rows(substudy_totalclust, .id="id")
+substudy_totalclust$tree[substudy_totalclust$tree=="wgs"] <- "wgs100"
+substudy_totalclust$tree <- factor(substudy_totalclust$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"))
+matchnames <- c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100")
+substudy_totalclust$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,95,99,100)[match(substudy_totalclust$tree, matchnames)]
+
+# size of clusters
+substudy_clustsize <- lapply(substudy_allclusters, function(sample) {
+    df <- lapply(sample, function(threshold) {
+        sizes <- sapply(threshold, function(y) sapply(y[[1]], length))
+        sizes_df <- bind_rows(lapply(sizes, data.frame), .id="tree")
+        colnames(sizes_df) <- c("tree", "size")
+        return(sizes_df)
+    })
+    df <- bind_rows(df, .id="threshold")
+    return(df)
+})
+substudy_clustsize <- bind_rows(substudy_clustsize, .id="id")
+substudy_clustsize$tree[substudy_clustsize$tree=="wgs"] <- "wgs100"
+substudy_clustsize$tree <- factor(substudy_clustsize$tree, levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"))
+colnames(substudy_clustsize) <- c("id", "bootstrap", "tree", "size")
+substudy_clustsize$numerical_tree <- c(0,10,20,30,40,50,60,70,80,90,95,99,100)[match(substudy_clustsize$tree, matchnames)]
 ```
 
 For the number of clusters and size of clusters, we compute two dataframes, `samples_totalclust` and `samples_clustsize`. The `samples_totalclust` will be used later as well to help compute AMI, but for `sample_clustsize` we will compute the mean cluster size to summarize the cluster size distribution in a dataframe `samples_mean_clustsize`. In general all of them follow a Poisson distribution with mostly clusters of size 2, with larger clusters as more rare. (Supplementary Figure)
@@ -343,36 +487,91 @@ samples_clustsize <- filter(samples_clustsize, id != 15)
 
 samples_mean_clustsize <- samples_clustsize %>%
     group_by(id, bootstrap, tree) %>%
-    summarise(mean=mean(size))
-filter(samples_totalclust, id != 15) %>% group_by(bootstrap, tree) %>% summarise(mean=mean(totalclust)) %>% pivot_wider(names_from=tree, values_from=mean)
+    dplyr::summarise(mean=mean(size))
+
+filter(samples_totalclust, id != 15) %>% group_by(bootstrap, tree) %>% dplyr::summarise(mean=mean(totalclust)) %>% pivot_wider(names_from=tree, values_from=mean)
 
 samples_clustchange <- left_join(samples_totalclust, samples_mean_clustsize)
 
 library(patchwork)
-p1 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=totalclust)) + geom_jitter() + geom_smooth() +
+p1 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=totalclust)) + geom_boxplot(aes(group=numerical_tree), outlier.size=0.5) + stat_summary(fun.y=median,aes(group=1),geom="line") +
     theme_bw() +
     xlab("wgs Percentage") +
     ylab("Cluster Number") +
     theme(legend.position="none") +
-    ggtitle("Cluster Number") + facet_wrap(~bootstrap)
-p2 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=mean)) + geom_jitter() + geom_smooth() +
+    ggtitle("Cluster Number") + facet_wrap(~bootstrap, ncol=3) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1,size=5),
+          axis.text.y=element_text(size=5),
+          strip.text=element_text(size=5))
+p2 <- ggplot(samples_clustchange, aes(x=numerical_tree,y=mean)) + geom_boxplot(aes(group=numerical_tree), outlier.size=0.5) + stat_summary(fun.y=median,aes(group=1),geom="line") +
     theme_bw() +
     xlab("wgs Percentage") +
     ylab("Mean Cluster Size") +
     ggtitle("Mean Cluster Size") +
-    guides(color=guide_legend(title="Bootstrap")) + facet_wrap(~bootstrap)
-#tiff(filename=file.path(PATH,"figures/fig3.tif"),res=300,width=1800,height=1400)
-p1 + p2 + plot_annotation(tag_levels = 'A')
+    guides(color=guide_legend(title="Bootstrap")) + facet_wrap(~bootstrap, ncol=3) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1,size=5),
+          axis.text.y=element_text(size=5),
+          strip.text=element_text(size=5))
+#tiff(filename=file.path(PATH,"figures/revision/fig6.tif"),res=300,width=1600,height=1600)
+p1 / p2 + plot_annotation(tag_levels = 'A')
 #dev.off()
 ```
 
-## Supplementary Table 1
+```{r substudy_clustfilter}
+substudy_totalclust <- filter(substudy_totalclust, id != 15)
+substudy_clustsize <- filter(substudy_clustsize, id != 15)
+
+substudy_mean_clustsize <- substudy_clustsize %>%
+    group_by(id, bootstrap, tree) %>%
+    dplyr::summarise(mean=mean(size))
+
+filter(substudy_totalclust, id != 15) %>% group_by(bootstrap, tree) %>% dplyr::summarise(mean=mean(totalclust)) %>% pivot_wider(names_from=tree, values_from=mean)
+
+substudy_clustchange <- left_join(substudy_totalclust, substudy_mean_clustsize)
+
+library(patchwork)
+p1 <- ggplot(substudy_clustchange, aes(x=numerical_tree,y=totalclust)) + geom_boxplot(aes(group=numerical_tree), outlier.size=0.5) + stat_summary(fun.y=median,aes(group=1),geom="line") +
+    theme_bw() +
+    xlab("wgs Percentage") +
+    ylab("Cluster Number") +
+    theme(legend.position="none") +
+    ggtitle("Cluster Number") + facet_wrap(~bootstrap) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1,size=5),
+          axis.text.y=element_text(size=5),
+          strip.text=element_text(size=5))
+p2 <- ggplot(substudy_clustchange, aes(x=numerical_tree,y=mean)) + geom_boxplot(aes(group=numerical_tree), outlier.size=0.5) + stat_summary(fun.y=median,aes(group=1),geom="line") +
+    theme_bw() +
+    xlab("wgs Percentage") +
+    ylab("Mean Cluster Size") +
+    ggtitle("Mean Cluster Size") +
+    guides(color=guide_legend(title="Bootstrap")) + facet_wrap(~bootstrap) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1,size=5),
+          axis.text.y=element_text(size=5),
+          strip.text=element_text(size=5))
+#tiff(filename=file.path(PATH,"figures/revision/fig7.tif"),res=300,width=1600,height=1600)
+p1 / p2 + plot_annotation(tag_levels = 'A')
+#dev.off()
+```
+
+## Supplementary Table 1 and 2
 
 The supplementary table is not fully reproducible, in the sense that the only way I could get the formatting correct onto a word doc was by doing a preview and then saving that file rather than the `flextable::save_as_docx()` function, which would always have the table go off of the page. But the data itself is reproducible from this notebook and can be saved as a csv, and the kbl table is viewable from this document as well.
 
 ```{r clust_table}
 table_clustchange <- samples_clustchange %>% group_by(bootstrap, tree) %>%
-    summarise("Mean Number of Clusters"=mean(totalclust), "Mean Cluster Size"=mean(mean)) %>%
+    dplyr::summarise("Mean Number of Clusters"=mean(totalclust), "Mean Cluster Size"=mean(mean)) %>%
     pivot_longer(names_to="stat", cols=c("Mean Number of Clusters","Mean Cluster Size")) %>%
     pivot_wider(names_from=tree, values_from=value)
 
@@ -380,7 +579,7 @@ library(flextable)
 ft1 <- samples_clustchange %>%
     filter(id != 15) %>%
     group_by(bootstrap, tree) %>%
-    summarise("Number"=mean(totalclust), "Size"=mean(mean)) %>%
+    dplyr::summarise("Number"=mean(totalclust), "Size"=mean(mean)) %>%
     pivot_longer(names_to="stat", cols=c("Number","Size")) %>%
     pivot_wider(names_from=c(bootstrap,stat), values_from=value) %>%
     flextable() |>
@@ -399,7 +598,41 @@ ft1 <- samples_clustchange %>%
 
 #save_as_docx(ft1,path="cluster_table.docx", pr_section=officer::prop_section(page_size=officer::page_size(orient="landscape")))
 
-kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("Bootstrap=70"=2,"Bootstrap=80"=2,"Bootstrap=85"=2,"Bootstrap=90"=2,"Bootstrap=95"=2,"Bootstrap=99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
+kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("Bootstrap=70"=2,"Bootstrap=80"=2,"Bootstrap=85"=2,"Bootstrap=90"=2,"Bootstrap=95"=2,"Bootstrap=99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
+
+#kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("70"=2,"80"=2,"85"=2,"90"=2,"95"=2,"99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
+```
+
+```{r substudy_clust_table}
+table_clustchange <- substudy_clustchange %>% group_by(bootstrap, tree) %>%
+    dplyr::summarise("Mean Number of Clusters"=mean(totalclust), "Mean Cluster Size"=mean(mean)) %>%
+    pivot_longer(names_to="stat", cols=c("Mean Number of Clusters","Mean Cluster Size")) %>%
+    pivot_wider(names_from=tree, values_from=value)
+
+library(flextable)
+ft1 <- substudy_clustchange %>%
+    filter(id != 15) %>%
+    group_by(bootstrap, tree) %>%
+    dplyr::summarise("Number"=mean(totalclust), "Size"=mean(mean)) %>%
+    pivot_longer(names_to="stat", cols=c("Number","Size")) %>%
+    pivot_wider(names_from=c(bootstrap,stat), values_from=value) %>%
+    flextable() |>
+    colformat_double() |>
+    theme_vanilla() |>
+    separate_header() %>%
+    add_header_row(values=c("Mixture","Bootstrap"),
+                   colwidths=c(1,12)) %>%
+    labelizor(part="header",labels=c("tree"="")) %>%
+    add_footer_lines("Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the set of mixture samples.") %>%
+    set_caption(caption="Cluster statistics by mixture and threshold.") %>%
+    fontsize(size=8.5, part="body") %>%
+    fontsize(size=8.5, part="header") #%>%
+    #set_table_properties(width=1, layout="autofit") %>%
+    #print(preview="docx")
+
+#save_as_docx(ft1,path=file.path(PATH,"figures/revision/sup_table2.docx"), pr_section=officer::prop_section(page_size=officer::page_size(orient="landscape")))
+
+kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("Bootstrap=70"=2,"Bootstrap=80"=2,"Bootstrap=85"=2,"Bootstrap=90"=2,"Bootstrap=95"=2,"Bootstrap=99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
 
 #kbl(select(ungroup(table_clustchange),stat:wgs100), digits=3, col.names=c("Stat","pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"), caption="Mean number of clusters and cluster size at different bootstrap thresholds and mixtures. Each value is the mean over the samples run.") %>% pack_rows(index=c("70"=2,"80"=2,"85"=2,"90"=2,"95"=2,"99"=2),label_row_css = "background-color: #666; color: #fff;") %>% kable_paper("striped")
 ```
@@ -433,10 +666,10 @@ samples_cluster_compare <- mutate(samples_cluster_compare, F1=(2*precision*recal
 ggplot(filter(samples_cluster_compare, tree!="wgs"),aes(y=precision,x=recall,color=tree)) + geom_boxplot() + facet_wrap(~bootstrap, scale="free")
 ```
 
-# Figure 4: Clustering AMIs for trees
+# Figure 8 and 9: Clustering AMIs for trees
 
 ```{r ami_sharedclust, echo=FALSE}
-samples_clustid <- lapply(samples_allclusters, function(sample) {
+samples_clustid <- mclapply(samples_allclusters, function(sample) {
     tdf <- lapply(sample, function(threshold) {
         lapply(seq_along(threshold), function(n) {
             mix <- threshold[[n]]
@@ -455,38 +688,25 @@ samples_clustid <- lapply(samples_allclusters, function(sample) {
     names(tdf) <- c("70","80","85","90","95","99")
     tdf <- bind_rows(tdf,.id="threshold")
     return(tdf)
-    })
-samples_AMI <- lapply(samples_clustid, function(sample) {
-    sample %>% group_by(threshold) %>% summarise(across(wgs90:pol, ~AMI(.x,wgs))) %>%
-        pivot_longer(cols=wgs90:pol, names_to="mix", values_to="AMI")
-})
-samples_AMImean <- bind_rows(samples_AMI,.id="id") %>% group_by(threshold,mix) %>% summarise(mAMI=mean(AMI))
+    }, mc.cores=detectCores())
+samples_AMI <- mclapply(samples_clustid, function(sample) {
+    sample %>% group_by(threshold) %>% dplyr::summarise(dplyr::across(wgs99:pol, ~AMI(.x,wgs100))) %>%
+        pivot_longer(cols=wgs99:pol, names_to="mix", values_to="AMI")
+}, mc.cores=detectCores())
+samples_AMImean <- bind_rows(samples_AMI,.id="id") %>% group_by(threshold,mix) %>% dplyr::summarise(mAMI=mean(AMI))
+samples_AMI_df <- bind_rows(samples_AMI,.id="id") %>% filter(id != 15)
+samples_AMI_df$colval <- rename_df$numval[match(samples_AMI_df$mix,rename_df$treenames)]
 
 
-# test4 <- bind_rows(samples_clustid[[1]], samples_clustid[[2]], samples_clustid[[3]], samples_clustid[[4]], .id="id") %>% group_by(threshold, id)
-# 
-# group_by(threshold) %>% summarise(across(wgs90:wgs, list(wgs=~AMI(.x,wgs),wgs90=~AMI(.x,wgs90),wgs80=~AMI(.x,wgs80),
-#                                                                                   wgs70=~AMI(.x,wgs70),wgs60=~AMI(.x,wgs60),wgs50=~AMI(.x,wgs50),
-#                                                                                   wgs40=~AMI(.x,wgs40),wgs30=~AMI(.x,wgs30),wgs20=~AMI(.x,wgs20),
-#                                                                                   wgs10=~AMI(.x,wgs10),pol=~AMI(.x,pol)))) %>%
-#     pivot_longer(cols=wgs90_wgs:wgs_pol,names_to="mix_mix",values_to="AMI") %>%
-#     separate(col="mix_mix",into=c("mix1","mix2")) -> test
-# test2 <- unite(test, "mix11", mix1, id, remove=FALSE) %>% unite("mix21", mix2, id)
-#     autoplot(cmdscale(1-acast(filter(test,threshold==99),mix1~mix2,value.vaar="AMI"),eig=TRUE),label=TRUE)
-#     
-#     testmat <- left_join(filter(samples_clustid[[1]], threshold==99), filter(samples_clustid[[2]], threshold==99), by=c("threshold","id")) %>% left_join(filter(samples_clustid[[24]],threshold==99), by=c("threshold","id")) %>% replace(is.na(.),0)
-#     
-#     testami <- lapply(3:35, function(x) lapply(3:35, function(y) AMI(testmat[,x],testmat[,y])))
-#     testami_mat <- acast(melt(testami),L2~L1)
-#     ggplot(data.frame(cmdscale(1 - testami_mat),mix=c(treenames,treenames,treenames))) + geom_point(aes(x=X1,y=X2,color=mix)) + theme_bw()
-#     
-#                                                                                   """
-# 
-
-#tiff(filename=file.path(PATH,"figures/fig4.tif"),res=300,width=2000,height=1200)
-ggplot(bind_rows(samples_AMI,.id="id") %>% filter(id != 15),aes(y=AMI,x=mix)) + geom_boxplot() + facet_wrap(~threshold) + xlab("Mixture") +
+#tiff(filename=file.path(PATH,"figures/revision/fig8.tif"),res=300,width=2000,height=1200)
+ggplot(samples_AMI_df,aes(y=AMI,x=colval)) + geom_boxplot(aes(group=colval),outlier.size=0.5) +
+    stat_summary(fun.y=median,aes(group=1),geom="line") +
+    facet_wrap(~threshold) + xlab("Mixture") +
     theme_bw() +
-    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) + theme(legend.position="none") + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+)
 #dev.off()
 
 
@@ -511,6 +731,330 @@ ggplot(test6, aes(x=id, y=threshold, fill=prop)) + geom_raster()
 
 test7 <- test4 %>% group_by(tree, id) %>% summarise(prop=sum(shared)/n())
 ggplot(test7, aes(x=id, y=tree, fill=prop)) + geom_raster()
+```
+
+```{r substudy_ami_sharedclust, echo=FALSE}
+substudy_clustid <- mclapply(substudy_allclusters, function(sample) {
+    tdf <- lapply(sample, function(threshold) {
+        lapply(seq_along(threshold), function(n) {
+            mix <- threshold[[n]]
+            mixname <- names(threshold)[n]
+            mixid <- mix[[2]]
+            names(mixid) <- 1:length(mixid)
+            mixdf <- unlist(mixid)
+            mixdf <- data.frame(id=mixdf,clust=names(mixdf)) %>%
+                mutate(clust=substr(clust,1,nchar(clust)-1))
+            names(mixdf) <- c("id",mixname)
+            return(mixdf)
+            }) %>%
+            reduce(full_join,by=c("id")) %>%
+            replace(is.na(.),0) # replace all NAs
+            })
+    names(tdf) <- c("70","80","85","90","95","99")
+    tdf <- bind_rows(tdf,.id="threshold")
+    return(tdf)
+    }, mc.cores=detectCores())
+substudy_AMI <- mclapply(substudy_clustid, function(sample) {
+    sample %>% group_by(threshold) %>% dplyr::summarise(dplyr::across(wgs99:pol, ~AMI(.x,wgs100))) %>%
+        pivot_longer(cols=wgs99:pol, names_to="mix", values_to="AMI")
+}, mc.cores=detectCores())
+substudy_AMImean <- bind_rows(substudy_AMI,.id="id") %>% group_by(threshold,mix) %>% dplyr::summarise(mAMI=mean(AMI))
+substudy_AMI_df <- bind_rows(substudy_AMI,.id="id") %>% filter(id != 15)
+substudy_AMI_df$colval <- rename_df$numval[match(substudy_AMI_df$mix,rename_df$treenames)]
+
+#tiff(filename=file.path(PATH,"figures/revision/fig9.tif"),res=300,width=2000,height=1200)
+ggplot(substudy_AMI_df,aes(y=AMI,x=colval)) + geom_boxplot(aes(group=colval),outlier.size=0.5) +
+    stat_summary(fun.y=median,aes(group=1),geom="line") +
+    facet_wrap(~threshold) + xlab("Mixture") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) + theme(legend.position="none") + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+)
+#dev.off()
+```
+
+```{r ami_ttest}
+substudy_AMI_df
+# for samples
+lapply(c(70,80,85,90,95,99), function(t) {
+    lapply(c("wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99"), function(m) {
+        pol_ami <- filter(samples_AMI_df, mix=="pol" & threshold==t)$AMI
+        compare_ami <- filter(samples_AMI_df, mix==m & threshold==t)$AMI
+        t.test(compare_ami, pol_ami, paired=TRUE, alternative="greater")
+    })
+})
+
+# for substudy
+lapply(c(70,80,85,90,95,99), function(t) {
+    lapply(c("wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99"), function(m) {
+        pol_ami <- filter(substudy_AMI_df, mix=="pol" & threshold==t)$AMI
+        compare_ami <- filter(substudy_AMI_df, mix==m & threshold==t)$AMI
+        t.test(compare_ami, pol_ami, paired=TRUE, alternative="greater")
+    })
+})
+```
+
+# Figure 10 and Figure 11: Overlap coefficient
+
+```{r overlap_cluster_comparison, eval=FALSE, echo=FALSE}
+# lapply over each sample
+
+cluster_comparison_results <- mclapply(samples_clustid, function(sample) {
+    sample %>%
+  # group by threshold
+  group_by(threshold) %>%
+  nest() %>%
+  # For each threshold, run the comparison
+  mutate(
+          # for each non-wgs100 tree:
+        # for each cluster, find cluster in wgs100 tree that it shares the most members with
+        # compute overlap coefficient
+        # apply thresholds of 0.5 and 0.67
+    comparison = map(data, ~{
+      # Separate out wgs and mix clusters
+        wgs_clusters <- .x %>%
+            select(id, wgs100) %>%
+            group_by(wgs100) %>%
+            dplyr::summarise(
+                wgs_seqs = list(id),
+                wgs_size = n()) %>%
+            dplyr::rename(wgs_clust_id=wgs100)
+
+        test_clusters <- .x %>%
+            select(-wgs100) %>%
+            pivot_longer(wgs99:pol, names_to="mix", values_to="test_clust_id") %>%
+            group_by(mix, test_clust_id) %>%
+            dplyr::summarise(
+                test_seqs = list(id),
+                test_size = n()
+            )
+
+      tidyr::crossing(wgs_clusters, test_clusters) %>%
+        # compute intersection size
+        mutate(intersection_size = map2_int(wgs_seqs, test_seqs, ~length(intersect(.x, .y)))) %>%
+        # for each test clust, find wgs clust with biggest intersection
+        group_by(mix, test_clust_id) %>%
+        filter(intersection_size==max(intersection_size)) %>%
+        # handle ties
+        slice_min(order_by = wgs_size, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        # calculate overlap metrics for "best-match" pairs
+    mutate(
+        union_size = test_size + wgs_size - intersection_size,
+        jaccard_index = intersection_size / union_size,
+        overlap_coefficient = intersection_size / pmin(test_size, wgs_size),
+        prop_overlap_test = intersection_size / test_size,
+        prop_overlap_ref = intersection_size / wgs_size
+    ) %>%
+    # Reorder for clarity
+    select(
+        mix, test_clust_id, wgs_clust_id, test_size, wgs_size,
+        intersection_size, jaccard_index, overlap_coefficient,
+        prop_overlap_test, prop_overlap_ref
+    )
+        })
+    ) %>%
+    # Unnest the results to a single flat table
+    select(threshold, comparison) %>%
+    unnest(cols = c(comparison))
+}, mc.cores=detectCores())
+saveRDS(cluster_comparison_results,file=file.path(RDATA,"sample_cluster_comparison.rds"))
+```
+
+```{r overlap}
+# Define the thresholds for congruence
+thresholds <- c(0.5, 2/3)
+names(thresholds) <- c(">50%", ">2/3")
+
+# Get the total number of reference ('wgs') clusters for each distance threshold
+total_reference_clusters <- mclapply(samples_clustid, function(sample) { sample %>% select(threshold, id, wgs100) %>%
+  group_by(threshold) %>%
+  dplyr::summarise(total_ref_clusters = n_distinct(wgs100), .groups = "drop")}, mc.cores=detectCores())
+
+# Calculate the number and proportion of reference clusters recovered
+recovery_summary <- lapply(1:length(cluster_comparison_results), function(i) {
+    #print(paste("i:",i))
+    imap_dfr(thresholds, \(x,idx) {
+    cluster_comparison_results[[i]] %>%
+      # *** NEW METRIC ***: Filter using overlap_coefficient
+      filter(overlap_coefficient > x) %>%
+      group_by(mix,threshold) %>%
+      # for unique would be n_distinct(wgs_clust_id), but I don't think we need that since it's fine for multiple clusters to be subset of a bigger one
+      dplyr::summarise(recovered_clusters = n(), .groups = "drop") %>%
+      mutate(threshold_label = idx)
+    }, .id = "threshold_value") %>%
+  # Join with totals to calculate proportion
+  left_join(total_reference_clusters[[i]], by = "threshold") %>%
+  mutate(prop_recovered = recovered_clusters / total_ref_clusters)
+})
+recovery_summary_bind <- bind_rows(recovery_summary, .id="id")
+rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
+recovery_summary_bind$colval <- rename_df$numval[match(recovery_summary_bind$mix,rename_df$treenames)]
+
+#tiff(filename=file.path(PATH,"figures/revision/fig10.tif"),res=300,width=2000,height=1200)
+ggplot(recovery_summary_bind, aes(x=colval,y=prop_recovered,color=threshold_value)) +
+    stat_summary(fun.y=median, geom="line", aes(group=threshold_value)) +
+    geom_boxplot(aes(group=interaction(colval,threshold_value)),outlier.size=.5) +
+    facet_wrap(~threshold) + ylim(0,1) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    xlab("Mixture") +
+    ylab("Proportion Recovered")
+#dev.off()
+```
+```{r overlap_substudy_compare}
+# 0 indicates did not cluster
+substudy_clustid <- lapply(substudy_allclusters, function(sample) {
+    tdf <- lapply(sample, function(threshold) {
+        lapply(seq_along(threshold), function(n) {
+            mix <- threshold[[n]]
+            mixname <- names(threshold)[n]
+            mixid <- mix[[2]]
+            names(mixid) <- 1:length(mixid)
+            mixdf <- unlist(mixid)
+            mixdf <- data.frame(id=mixdf,clust=names(mixdf)) %>%
+                mutate(clust=substr(clust,1,nchar(clust)-1))
+            names(mixdf) <- c("id",mixname)
+            return(mixdf)
+            }) %>%
+            reduce(full_join,by=c("id")) %>%
+            replace(is.na(.),0) # replace all NAs
+            })
+    names(tdf) <- c("70","80","85","90","95","99")
+    tdf <- bind_rows(tdf,.id="threshold")
+    return(tdf)
+    })
+
+# lapply over each sample
+
+substudy_cluster_comparison_results <- mclapply(substudy_clustid, function(sample) {
+    sample %>%
+  # group by threshold
+  group_by(threshold) %>%
+  nest() %>%
+  # For each threshold, run the comparison
+  mutate(
+          # for each non-wgs100 tree:
+        # for each cluster, find cluster in wgs100 tree that it shares the most members with
+        # compute overlap coefficient
+        # apply thresholds of 0.5 and 0.67
+    comparison = map(data, ~{
+      # Separate out wgs and mix clusters
+        wgs_clusters <- .x %>%
+            select(id, wgs100) %>%
+            group_by(wgs100) %>%
+            dplyr::summarise(
+                wgs_seqs = list(id),
+                wgs_size = n()) %>%
+            dplyr::rename(wgs_clust_id=wgs100)
+
+        test_clusters <- .x %>%
+            select(-wgs100) %>%
+            pivot_longer(wgs99:pol, names_to="mix", values_to="test_clust_id") %>%
+            group_by(mix, test_clust_id) %>%
+            dplyr::summarise(
+                test_seqs = list(id),
+                test_size = n()
+            )
+
+      tidyr::crossing(wgs_clusters, test_clusters) %>%
+        # compute intersection size
+        mutate(intersection_size = map2_int(wgs_seqs, test_seqs, ~length(intersect(.x, .y)))) %>%
+        # for each test clust, find wgs clust with biggest intersection
+        group_by(mix, test_clust_id) %>%
+        filter(intersection_size==max(intersection_size)) %>%
+        # handle ties
+        slice_min(order_by = wgs_size, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        # calculate overlap metrics for "best-match" pairs
+    mutate(
+        union_size = test_size + wgs_size - intersection_size,
+        jaccard_index = intersection_size / union_size,
+        overlap_coefficient = intersection_size / pmin(test_size, wgs_size),
+        prop_overlap_test = intersection_size / test_size,
+        prop_overlap_ref = intersection_size / wgs_size
+    ) %>%
+    # Reorder for clarity
+    select(
+        mix, test_clust_id, wgs_clust_id, test_size, wgs_size,
+        intersection_size, jaccard_index, overlap_coefficient,
+        prop_overlap_test, prop_overlap_ref
+    )
+        })
+    ) %>%
+    # Unnest the results to a single flat table
+    select(threshold, comparison) %>%
+    unnest(cols = c(comparison))
+}, mc.cores=detectCores())
+#substudy_cluster_comparison_results_bind <- bind_rows(substudy_cluster_comparison_results,id="id")
+saveRDS(cluster_comparison_results,file=file.path(RDATA,"substudy_cluster_comparison.rds"))
+```
+
+```{r overlap_substudy_plot}
+# Define the thresholds for congruence
+thresholds <- c(0.5, 2/3)
+names(thresholds) <- c(">50%", ">2/3")
+
+# Get the total number of reference ('wgs') clusters for each distance threshold
+total_reference_clusters <- mclapply(substudy_clustid, function(sample) { sample %>% select(threshold, id, wgs100) %>%
+  group_by(threshold) %>%
+  dplyr::summarise(total_ref_clusters = n_distinct(wgs100), .groups = "drop")}, mc.cores=detectCores())
+
+# Calculate the number and proportion of reference clusters recovered
+substudy_recovery_summary <- lapply(1:length(substudy_cluster_comparison_results), function(i) {
+    #print(paste("i:",i))
+    imap_dfr(thresholds, \(x,idx) {
+    substudy_cluster_comparison_results[[i]] %>%
+      # *** NEW METRIC ***: Filter using overlap_coefficient
+      filter(overlap_coefficient > x) %>%
+      group_by(mix,threshold) %>%
+      # for unique would be n_distinct(wgs_clust_id), but I don't think we need that since it's fine for multiple clusters to be subset of a bigger one
+      dplyr::summarise(recovered_clusters = n(), .groups = "drop") %>%
+      mutate(threshold_label = idx)
+    }, .id = "threshold_value") %>%
+  # Join with totals to calculate proportion
+  left_join(total_reference_clusters[[i]], by = "threshold") %>%
+  mutate(prop_recovered = recovered_clusters / total_ref_clusters)
+})
+substudy_recovery_summary_bind <- bind_rows(substudy_recovery_summary, .id="id")
+#rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
+substudy_recovery_summary_bind$colval <- rename_df$numval[match(substudy_recovery_summary_bind$mix,rename_df$treenames)]
+
+#tiff(filename=file.path(PATH,"figures/revision/fig11.tif"),res=300,width=2000,height=1200)
+ggplot(substudy_recovery_summary_bind, aes(x=colval,y=prop_recovered,color=threshold_value)) +
+    stat_summary(fun.y=median, geom="line", aes(group=threshold_value)) +
+    geom_boxplot(aes(group=interaction(colval,threshold_value)),outlier.size=.5) +
+    facet_wrap(~threshold) + ylim(0,1) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) + scale_x_continuous(
+    breaks=c(0,10,20,30,40,50,60,70,80,90,95,99),
+  labels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99")
+) +
+    xlab("Mixture") +
+    ylab("Proportion Recovered")
+#dev.off()
+```
+
+```{r}
+substudy_alignment <- read.FASTA(file.path(PATH,"results/substudy/brazil18858.padded.fasta"))
+substudy_dists <- dist.dna(substudy_alignment, model="TN93")
+test <- as.matrix(substudy_dists) %>% as.data.frame()
+test$n1 <- rownames(test)
+test2 <- test %>% pivot_longer(cols=-n1, names_to="n2")
+ids <- filter(substudy_clustid[[1]], threshold==95) %>% filter(wgs100==1) %>% .$id
+
+
+test3 <- sapply(1:21, function(x) {
+    ids <- filter(substudy_clustid[[1]], threshold==95) %>% filter(wgs100==x) %>% .$id
+    filter(test2, n1 %in% ids & n2 %in% ids & value != 0) %>% .$value %>%
+        unique() %>% mean()
+})
+
+which(test3 > .053)
 ```
 
 # Figure 5: wgs50 phylogeny colored by tip sequence type
@@ -576,10 +1120,9 @@ wgs50clust_labels <- lapply(wgs50clust_tips, function(x) wgs50@phylo$tip.label[x
 wgs50clust_index <- sapply(wgs50clust_labels, function(x) which(sapply(labels, identical, x)))
 ```
 
-
 ```{r wgs50_cluster_prop, echo=FALSE, eval=FALSE}
 # this is not correct because need to get alignment names as well aka which sequences got masked and which didn't
-sample_alignmentfiles <- future_lapply(list.dirs(ALIGNMENT_PATH), function(x) {
+sample_alignmentfiles <- mclapply(list.dirs(ALIGNMENT_PATH), function(x) {
     alignmentfiles <- list.files(x, ".fa$", full.names=TRUE)
     alignments <- lapply(alignmentfiles, read.FASTA)
         # naming
@@ -595,7 +1138,7 @@ sample_alignmentfiles <- future_lapply(list.dirs(ALIGNMENT_PATH), function(x) {
             #print(names(alignments))
         }}
     return(alignments)
-    })
+    }, mc.cores=detectCores())
 
 #round(len(shuff_ids_list) * pct_to_mask / 10)
 rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
@@ -627,6 +1170,7 @@ sample_seqtypedf <- lapply(sample_alignmentfiles, function(trees) {
 wgs50_clusters <- lapply(samples_allclusters, function(sample) {
     lapply(sample, function(bootstrap) return(bootstrap$wgs50))
 })
+
 clustdf_func <- function(bootstrap, seqtypedf) {
         clustdf <- data.frame(label=alignmentnames)
         cl <- bootstrap[[2]]
@@ -646,7 +1190,7 @@ clustdf_func <- function(bootstrap, seqtypedf) {
         clustdf <- left_join(clustdf, seqtypedf, by=c("label"="Labels"))
 }
 
-all_clustdf <- future_lapply(1:20, function(index) {
+all_clustdf <- mclapply(1:20, function(index) {
     #print(paste("y:",index))
     sample <- samples_allclusters[[index]]
     s_seqtypedf <- sample_seqtypedf[[index]]
@@ -664,7 +1208,7 @@ all_clustdf <- future_lapply(1:20, function(index) {
         })
     names(bootstrap_clustdf) <- c("70","80","85","90","95","99")
     bootstrap_clustdf <- bind_rows(bootstrap_clustdf,.id="threshold")
-})
+}, mc.cores=detectCores())
 all_clustdf_bind <- bind_rows(all_clustdf, .id="id")
 all_clustdf_bind <- filter(all_clustdf_bind, !is.na(index))
 all_clustdf_bind <- filter(all_clustdf_bind, !is.na(Type))
@@ -674,6 +1218,14 @@ clust_pol_mean <- all_clustdf_bind %>% group_by(id,threshold,mixture,index,Type)
     group_by(id, threshold, mixture) %>%
     summarise(m=mean(freq))
 ggplot(clust_pol_mean, aes(x=mixture,y=m)) + geom_boxplot() + facet_wrap(~threshold)
+
+# with median line plot
+ggplot(clust_pol_mean, aes(x=mixture,y=m)) + geom_boxplot() +
+    stat_summary(fun.y=median, geom="line", aes(group=1)) + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+```
+
+```{r}
+test <- as.matrix(sample_alignmentfiles[[1]]$wgs90)[,pis(as.matrix(sample_alignmentfiles[[1]]$wgs90), what="index")]
 ```
 
 ```{r og_wgs50, eval=FALSE, echo=FALSE}
@@ -764,8 +1316,8 @@ This generates several figures, 3 of them are supplementary and 1 is the actual 
 
 ```{r params}
 # from R/loadparams.R
-wgsparams <- paramsdf(file.path(PATH,"results/trees/HIV1_FLT_2018_genome_DNA_subtypeB.fa.iqtree"))
-folders <- list.files(file.path(PATH,"results/trees/samples"))
+wgsparams <- paramsdf2(file.path(PATH,"results/trees/HIV1_FLT_2018_genome_DNA_subtypeB.fa.iqtree"))
+folders <- list.files(file.path(PATH,"results/trees/samples"))[1:100]
 sampleparams <- lapply(folders, function(x) {
     loadparams(file.path(PATH,"results/trees/samples",x))
 })
@@ -776,28 +1328,37 @@ wgsparams$id <- 1000
 wgsparams$tree <- "wgs100"
 paramdf <- rbind(paramdf, wgsparams) %>%
     mutate(tree=fct_relevel(tree,"pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs100"))
+paramdf$colval <- rename_df$numval[match(paramdf$tree,rename_df$treenames)]
+paramdf$tree <- factor(paramdf$tree,
+                       levels=c("pol","wgs10","wgs20","wgs30","wgs40","wgs50","wgs60","wgs70","wgs80","wgs90","wgs95","wgs99","wgs100"), ordered=TRUE)
 
-#tiff(filename=file.path(PATH,"figures/fig6.tif"),res=300,width=2000,height=1200)
-ggplot(filter(paramdf, Type=="Rate parameter R"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + xlab("Mixture") +
+#tiff(filename=file.path(PATH,"figures/revision/fig13.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="Rate parameter R"), aes(x=tree,y=Value)) + geom_boxplot(outlier.size=.5) + facet_wrap(~Param, scales="free_y") + xlab("Mixture") +
     ylab("Rate") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
 #dev.off()
 ```
 
 ```{r params_statefreq}
-#tiff(filename=file.path(PATH,"figures/sup_fig1.tif"),res=300,width=1600,height=1600)
-ggplot(filter(paramdf, Type=="State freq"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#tiff(filename=file.path(PATH,"figures/revision/sup_fig1.tif"),res=300,width=1600,height=1600)
+ggplot(filter(paramdf, Type=="State freq"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) +
+    xlab("Mixture") +
+    ylab("State frequency")
 #dev.off()
 ```
 
 ```{r params_relativerate}
-#tiff(filename=file.path(PATH,"figures/sup_fig2.tif"),res=300,width=2000,height=1200)
-ggplot(filter(paramdf, Type=="relative rate"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#tiff(filename=file.path(PATH,"figures/revision/sup_fig2.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="relative rate"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) +
+    xlab("Mixture") +
+    ylab("Relative rate")
 #dev.off()
 ```
 
 ```{r params_rrprop}
-#tiff(filename=file.path(PATH,"figures/sup_fig3.tif"),res=300,width=2000,height=1200)
-ggplot(filter(paramdf, Type=="rr proportion"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+#tiff(filename=file.path(PATH,"figures/revision/sup_fig3.tif"),res=300,width=2000,height=1200)
+ggplot(filter(paramdf, Type=="rr proportion"), aes(x=tree,y=Value)) + geom_boxplot() + facet_wrap(~Param, scales="free_y") + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1)) +
+    xlab("Mixture") +
+    ylab("Relative rate proportion")
 #dev.off()
 ```
 
@@ -822,7 +1383,7 @@ fpdists <- lapply(fptrees, function(x) {
     #melt(as.matrix(tree_geodist), varnames = c("row", "col"))
 })
 df_fpdists <- bind_rows(fpdists, .id="id")
-ggplot(filter(df_fpdists, row=="wgs100" & value != 0), aes(x=col, y=value)) + geom_boxplot() + geom_jitter() + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+ggplot(filter(df_fpdists, row=="wgs100" & value != 0), aes(x=col, y=value)) + geom_boxplot() + stat_summary(fun.y=mean, geom="line") + geom_jitter() + theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
 ```
 
 ```{r rfdist_samplefp, eval=FALSE}
@@ -927,7 +1488,7 @@ maskgp120_AMI <- maskgp120_clustid %>% group_by(threshold) %>% summarise(across(
 maskgp120_AMImean <- bind_rows(maskgp120_AMI,.id="id") %>% group_by(threshold,mix) %>% summarise(mAMI=mean(AMI))
 
 #tiff(filename=file.path(PATH,"figures/supfig2.tif"),res=300,width=2000,height=1200)
-ggplot(bind_rows(maskgp120_AMI,.id="id") %>% filter(id != 15),aes(y=AMI,x=mix)) + geom_boxplot() + facet_wrap(~threshold) + xlab("Mixture") +
+ggplot(bind_rows(maskgp120_AMI,.id="id") %>% filter(id != 15),aes(y=AMI,x=mix)) + geom_line(aes(group=1)) + facet_wrap(~threshold) + xlab("Mixture") +
     theme_bw() +
     theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
 #dev.off()
@@ -935,7 +1496,7 @@ ggplot(bind_rows(maskgp120_AMI,.id="id") %>% filter(id != 15),aes(y=AMI,x=mix)) 
 #ggplot(cluster_compare,aes(y=precision,x=recall)) + geom_line() + ggrepel::geom_label_repel(aes(label = tree), max.overlaps=20) + facet_wrap(~bootstrap) + scale_y_log10() + scale_x_log10()
 ```
 
-## hypermut
+# hypermut
 
 ```{r}
 hypermut <- read_csv("/Users/aguang/CORE/kantorlab/hiv_wide/results/hypermut/summary.csv")
@@ -943,138 +1504,15 @@ seqinfo <- read_tsv("/Users/aguang/CORE/kantorlab/hiv_wide/results/seqtype/resul
 hypermut <- hypermut %>%
     mutate(Accession=sapply(strsplit(seq_name,"\\."),tail,1))
 seqmut_df <- left_join(seqinfo, hypermut, by="Accession")
-seqmut_df %>% group_by(`Molecule type`) %>% summarise(n=n()) %>% mutate(freq=n/sum(n))
-seqmut_df %>% group_by(`Molecule type`) %>% summarise(sum(fisher_p < .05)/n())
+seqmut_df %>%
+    distinct(Accession, .keep_all=TRUE) %>%
+    group_by(`Molecule type`) %>%
+    dplyr::summarise(n=n(),
+                     freq=n()/1194,
+                     hypermut=sum(fisher_p < .05),
+                     hypermut_freq=sum(fisher_p<.05)/n())
 #dna_seqmutdf <- filter(seqmut_df, `Molecule type`=="DNA")
 #sum(dna_seqmutdf$fisher_p < .05)/nrow(dna_seqmutdf)
 ```
 
-## Figure 7: Overlap coefficient
-
-```{r}
-wgs_clusters <- tibble(wgs_seq_id = samples_allclusters[[1]]$`70`$wgs[[2]])
-test_clusters <- tibble(test_seq_id = samples_allclusters[[1]]$`70`$wgs10[[2]])
-
-wgs_clust_70 <- filter(wgs_clusters, threshold=="70") %>% ungroup() %>% select(-threshold)
-test_clust_70 <- filter(test_clusters, threshold=="70") %>% ungroup() %>% select(-threshold)
-
-wgs_clust_95 <- filter(wgs_clusters, threshold=="95") %>% ungroup() %>% select(-threshold)
-test_clust_95 <- filter(test_clusters, threshold=="95") %>% ungroup() %>% select(-threshold)
-
-# lapply over each sample
-
-cluster_comparison_results <- future_lapply(samples_clustid, function(sample) {
-    sample %>%
-  # group by threshold
-  group_by(threshold) %>%
-  nest() %>%
-  # For each threshold, run the comparison
-  mutate(
-          # for each non-wgs100 tree:
-        # for each cluster, find cluster in wgs100 tree that it shares the most members with
-        # compute overlap coefficient
-        # apply thresholds of 0.5 and 0.67
-    comparison = map(data, ~{
-      # Separate out wgs and mix clusters
-        wgs_clusters <- .x %>%
-            select(id, wgs) %>%
-            group_by(wgs) %>%
-            summarise(
-                wgs_seqs = list(id),
-                wgs_size = n()) %>%
-            dplyr::rename(wgs_clust_id=wgs)
-
-        test_clusters <- .x %>%
-            select(-wgs) %>%
-            pivot_longer(wgs90:pol, names_to="mix", values_to="test_clust_id") %>%
-            group_by(mix, test_clust_id) %>%
-            summarise(
-                test_seqs = list(id),
-                test_size = n()
-            )
-
-      tidyr::crossing(wgs_clusters, test_clusters) %>%
-        # compute intersection size
-        mutate(intersection_size = map2_int(wgs_seqs, test_seqs, ~length(intersect(.x, .y)))) %>%
-        # for each test clust, find wgs clust with biggest intersection
-        group_by(mix, test_clust_id) %>%
-        filter(intersection_size==max(intersection_size)) %>%
-        # handle ties
-        slice_min(order_by = wgs_size, n = 1, with_ties = FALSE) %>%
-        ungroup() %>%
-        # calculate overlap metrics for "best-match" pairs
-    mutate(
-        union_size = test_size + wgs_size - intersection_size,
-        jaccard_index = intersection_size / union_size,
-        overlap_coefficient = intersection_size / pmin(test_size, wgs_size),
-        prop_overlap_test = intersection_size / test_size,
-        prop_overlap_ref = intersection_size / wgs_size
-    ) %>%
-    # Reorder for clarity
-    select(
-        mix, test_clust_id, wgs_clust_id, test_size, wgs_size,
-        intersection_size, jaccard_index, overlap_coefficient,
-        prop_overlap_test, prop_overlap_ref
-    )
-        })
-    ) %>%
-    # Unnest the results to a single flat table
-    select(threshold, comparison) %>%
-    unnest(cols = c(comparison))
-})
-cluster_comparison_results_bind <- bind_rows(cluster_comparison_results,)
-```
-
-```{r overlap}
-# Define the thresholds for congruence
-thresholds <- c(0.5, 2/3)
-names(thresholds) <- c(">50%", ">2/3")
-
-# Get the total number of reference ('wgs') clusters for each distance threshold
-total_reference_clusters <- future_lapply(samples_clustid, function(sample) { sample %>% select(threshold, id, wgs) %>%
-  group_by(threshold) %>%
-  summarise(total_ref_clusters = n_distinct(wgs), .groups = "drop")})
-
-# Calculate the number and proportion of reference clusters recovered
-recovery_summary <- lapply(1:length(cluster_comparison_results), function(i) {
-    #print(paste("i:",i))
-    imap_dfr(thresholds, \(x,idx) {
-    cluster_comparison_results[[i]] %>%
-      # *** NEW METRIC ***: Filter using overlap_coefficient
-      filter(overlap_coefficient > x) %>%
-      group_by(mix,threshold) %>%
-      # for unique would be n_distinct(wgs_clust_id), but I don't think we need that since it's fine for multiple clusters to be subset of a bigger one
-      summarise(recovered_clusters = n(), .groups = "drop") %>%
-      mutate(threshold_label = idx)
-    }, .id = "threshold_value") %>%
-  # Join with totals to calculate proportion
-  left_join(total_reference_clusters[[i]], by = "threshold") %>%
-  mutate(prop_recovered = recovered_clusters / total_ref_clusters)
-})
-recovery_summary_bind <- bind_rows(recovery_summary, .id="id")
-rename_df <- data.frame(treenames, numval=c(99,98,97,96,95,94,93,92,91,90,80,70,60,50,40,30,20,10,0,100,100))
-recovery_summary_bind$colval <- rename_df$numval[match(recovery_summary_bind$mix,rename_df$treenames)]
-ggplot(recovery_summary_bind, aes(x=colval,y=prop_recovered,color=threshold_value)) +
-    geom_smooth() +
-    geom_jitter(size=.1) +
-    stat_summary(fun.data = mean_se, geom = "errorbar") +
-    facet_wrap(~threshold) +
-    ylim(0,1)
-
-ggplot(comparisons, aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() + geom_jitter()
-
-ggplot(filter(comparisons, overlap_coefficient > .5), aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() + geom_jitter()
-
-filter(cluster_comparison_results, threshold=="95") %>% group_by(mix) %>% filter(overlap_coefficient >=0.5) %>% summarise(recovered_clusters = n_distinct(wgs_clust_id))
-
-ggplot(filter(cluster_comparison_results_bind, overlap_coefficient > 0.5), aes(x=factor(mix), y=overlap_coefficient)) + geom_boxplot() +
-    stat_summary(fun.data = mean_se, geom = "errorbar") +
-    facet_wrap(~threshold) #+geom_jitter(size=.1)
-```
-
-## Subset analysis
-
-```{r subset}
-# basically need to rerun everything...
-```
 
